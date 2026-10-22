@@ -52,6 +52,7 @@
 
 .g-pf-tree[data-layout="stack"] .g-pf-given {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -74,6 +75,7 @@
 
 .g-pf-tree[data-layout="stack"] .g-pf-goal {
   justify-self: start;
+  justify-items: start;
   text-align: left;
 }
 
@@ -272,8 +274,7 @@ button.g-pf-name:focus-visible {
 .g-pf-stop {
   display: grid;
   grid-template-rows: 1fr;
-  justify-self: stretch;
-  min-width: min(260px, 100%);
+  margin-top: 16px;
   animation: g-pf-open 320ms var(--g-ease-out) 200ms both;
 }
 
@@ -287,7 +288,7 @@ button.g-pf-name:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin: 4px 0 6px;
+  margin: 0 0 6px;
   color: var(--g-negative);
   font-size: 12px;
 }
@@ -385,5 +386,18 @@ button.g-pf-name:focus-visible {
 @keyframes g-pf-fade {
   from {
     opacity: 0;
+  }
+}
+
+/* A phone: the status gets its own line over the buttons, read left to right. */
+@container (max-width: 459px) {
+  .g-proof .g-walk-nav {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .g-proof .g-readout {
+    flex-basis: 100%;
+    text-align: left;
   }
 }

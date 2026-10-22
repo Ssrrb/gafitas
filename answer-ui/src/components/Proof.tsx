@@ -93,7 +93,7 @@ function Proof({ model, block }: { model: ProofModel; block?: string }) {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  React.useLayoutEffect(() => setStack(false), [width, broken]);
+  React.useLayoutEffect(() => setStack(false), [width]);
   React.useLayoutEffect(() => {
     if (stack || !tree.current || !stage.current) return;
     if (tree.current.offsetWidth > stage.current.clientWidth + 1) setStack(true);
@@ -190,7 +190,6 @@ function Proof({ model, block }: { model: ProofModel; block?: string }) {
             ) : null}
           </span>
         </div>
-        {i === shownStop && brokenNode ? <StopsHere node={brokenNode} rule={node} /> : null}
         {i === 0 ? (
           <p className="g-pf-goal" data-state={shownStop >= 0 ? "blocked" : undefined}>
             <span className="g-pf-claim">
@@ -245,6 +244,8 @@ function Proof({ model, block }: { model: ProofModel; block?: string }) {
             {renderRule(0)}
           </div>
         </div>
+        {/* Under the tree, full width: the refusing lines never reshape the tree they explain. */}
+        {shownStop >= 0 && brokenNode ? <StopsHere node={brokenNode} rule={nodes[shownStop]!} /> : null}
         <footer className="g-pf-foot">
           <ul className="g-pf-legend">
             <li>

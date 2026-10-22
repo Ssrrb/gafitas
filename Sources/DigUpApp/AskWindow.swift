@@ -458,6 +458,23 @@ final class AskModel {
         }
     }
 
+    /// A place in a line: what it defines, or, when it starts in the middle of something, what it's in ("in
+    /// HTTPAdapter.send", "in def send(…" when there's no class), from the file around it.
+    private static func summary(_ text: String, of row: ResultRow) async -> String {
+        let own = CodeExtractor.summary(text)
+        guard !CodeExtractor.defines(own), row.segment == .lines, let first = row.loc else { return own }
+        return await Task.detached {
+            guard let file = try? String(contentsOf: row.url, encoding: .utf8),
+                  let outer = CodeExtractor.enclosing(file, line: Int(first)) else { return own }
+            if let name = CodeExtractor.name(definedBy: outer.text),
+               let owner = CodeExtractor.enclosing(file, line: outer.line, within: 5000)
+                   .flatMap({ CodeExtractor.name(definedBy: $0.text) }) {
+                return "in \(owner).\(name)"
+            }
+            return "in " + outer.text
+        }.value
+    }
+
     /// ↩ in the question field: the places at once (without waiting for the typing pause), then the answer.
     func askNow() {
         guard !trimmed.isEmpty else { return }
@@ -724,7 +741,7 @@ final class AskModel {
             for row in places where summaries[row.id] == nil {
                 guard let text = await engine.text(ofSegment: row.segmentID, code: true), current == generation
                 else { continue }
-                summaries[row.id] = CodeExtractor.summary(text)
+                summaries[row.id] = await Self.summary(text, of: row)
             }
             log("ask: \"\(text)\": \(places.count) places in \(Set(places.map(repoName)).count) repos")
         }

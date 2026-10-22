@@ -344,6 +344,35 @@ import Testing
         #expect(CodeExtractor.summary("// header\nlet total = items.reduce(0, +)\n") == "let total = items.reduce(0, +)")
     }
 
+    @Test func aStretchInsideAFunctionIsNamedByIt() {
+        // requests' HTTPAdapter.send, cut in the middle as the stretches cut it: its stretch at line 6 is inside send.
+        let adapters = """
+            class HTTPAdapter(BaseAdapter):
+                def send(self, request, stream=False, timeout=None):
+                    conn = self.get_connection(request.url)
+                    if isinstance(timeout, tuple):
+                        connect, read = timeout
+
+                    try:
+                        resp = conn.urlopen(method=request.method, url=url)
+                    except ConnectionError as err:
+                        raise
+            """
+        #expect(CodeExtractor.enclosing(adapters, line: 6)?.text == "def send(self, request, stream=False, timeout=None):")
+        #expect(CodeExtractor.enclosing(adapters, line: 6)?.line == 2)
+        #expect(CodeExtractor.enclosing(adapters, line: 2)?.text == "class HTTPAdapter(BaseAdapter):")
+        #expect(CodeExtractor.enclosing(adapters, line: 1) == nil)   // at the left margin: inside nothing
+        #expect(CodeExtractor.name(definedBy: "def send(self, request):") == "send")
+        #expect(CodeExtractor.name(definedBy: "class HTTPAdapter(BaseAdapter):") == "HTTPAdapter")
+        #expect(CodeExtractor.name(definedBy: "public func open(_ url: URL) {") == "open")
+        #expect(CodeExtractor.defines("def send(self, request):") && !CodeExtractor.defines("if isinstance(timeout, tuple):"))
+        // A signature over several lines, closed at the definition's own indent.
+        let long = "class A:\n    def send(\n        self,\n        request,\n    ) -> Response:\n        conn = 1\n        go(conn)\n"
+        #expect(CodeExtractor.enclosing(long, line: 7)?.text == "def send(")
+        let swift = "struct Opener {\n    func open(_ url: URL) {\n        let line = 1\n        go(line)\n    }\n}\n"
+        #expect(CodeExtractor.enclosing(swift, line: 4)?.text == "func open(_ url: URL) {")
+    }
+
     @Test func aNameLookedUpPointsAtItsDefinition() throws {
         // The name is called twice near the top, and defined further down in a stretch of its own.
         let calls = "func run() {\n" + (1...30).map { "    refreshAccessToken()  // call \($0) of many" }

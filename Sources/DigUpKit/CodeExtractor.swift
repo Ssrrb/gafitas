@@ -142,6 +142,44 @@ public enum CodeExtractor {
         return line.count > 160 ? String(line.prefix(160)) + "…" : line
     }
 
+    /// The line defines something ("def send(…", "func open(…", "class HTTPAdapter…"), as `summary` tells.
+    public static func defines(_ line: String) -> Bool {
+        line.split(whereSeparator: \.isWhitespace).prefix(4).map(String.init).contains { CodeLookup.definesSomething($0) }
+    }
+
+    /// The definition a stretch sits inside, for one that starts in the middle of a function: the nearest line above
+    /// `line` (from 1) in the file's `text` that defines something and is indented less than the stretch's first line,
+    /// and where it is (from 1). It looks up to `within` lines above.
+    public static func enclosing(_ text: String, line: Int, within: Int = 400) -> (line: Int, text: String)? {
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" })
+        func indent(_ line: Substring) -> Int { line.prefix { $0 == " " || $0 == "\t" }.count }
+        guard var index = (line - 1 ..< lines.count).first(where: { $0 >= 0 && !lines[$0].allSatisfy(\.isWhitespace) })
+        else { return nil }
+        var limit = indent(lines[index])
+        // A few hundred lines above by default: a stretch is near the start of the function it's in, or naming that
+        // function is no help anyway (a class around a function can be much further).
+        while index > 0, index > line - within, limit > 0 {
+            index -= 1
+            let candidate = lines[index]
+            guard !candidate.allSatisfy(\.isWhitespace), indent(candidate) < limit else { continue }
+            let trimmed = candidate.trimmingCharacters(in: .whitespaces)
+            if defines(trimmed) { return (index + 1, trimmed.count > 160 ? String(trimmed.prefix(160)) + "…" : trimmed) }
+            // ") -> Response:" closes a signature spread over lines: it belongs to the definition above it.
+            if let first = trimmed.first, ")]}".contains(first) { continue }
+            limit = indent(candidate)
+        }
+        return nil
+    }
+
+    /// The name a definition gives: "send" for "def send(self, …", "HTTPAdapter" for "class HTTPAdapter(BaseAdapter):".
+    public static func name(definedBy line: String) -> String? {
+        let words = line.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let at = words.prefix(4).firstIndex(where: { CodeLookup.definesSomething($0) }), at + 1 < words.count
+        else { return nil }
+        let name = words[at + 1].prefix { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "$" }
+        return name.isEmpty ? nil : String(name)
+    }
+
     /// Lines that close a block (shell, Ruby, Lua, Objective-C, the C preprocessor).
     private static let closers: Set<String> = ["end", "fi", "done", "esac", "@end", "#endif", "end;", "end)"]
 

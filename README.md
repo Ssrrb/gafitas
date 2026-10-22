@@ -8,13 +8,17 @@ Gafitas ("little glasses") is a fork of [DigUp](https://github.com/ARahim3/DigUp
 files on your Mac by what's in them, with Google DeepMind's EmbeddingGemma 2 running locally. Gafitas keeps that engine
 and points it at your code, in one Ask window:
 
-1. **Dig up.** Describe a task or ask a question ("How can I connect the Hermes skill creation to my app harness?").
-   Gafitas finds the closest functions and files across the projects you index, on this Mac, in under a second,
-   grouped by project, with Reuse, Adapt and Ignore.
-2. **See it.** The [Pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent, with whatever model you give it, writes
-   the answer as an interactive figure: a small machine whose working *is* the idea, each part tied to real code.
-   The model only does the thinking (which machine, which parts, which steps); Gafitas ships the drawings, so a small
-   local model can explain as clearly as a frontier one.
+1. **Dig up.** Ask a question ("¿Cómo conecto los webhooks de billing-service con todo-web?"). Gafitas finds the
+   closest functions and files across the projects you index, on this Mac, in under a second.
+2. **See it.** The [Pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent, with whatever
+   model you give it, answers with a puzzle: each real function, class or module is a jigsaw piece in its project's
+   colour, each hand-off is the edge two pieces share, labelled with what crosses it, and the code you'd still have to
+   write is an empty piece in the gap. Click a piece and your editor opens at its line. The model only picks the
+   pieces and says how they fit; Gafitas draws them, so a small local model can explain as clearly as a frontier one.
+3. **Keep going.** Every question is a chat, kept on this Mac: reopen any of them at once, or keep asking. While Pi
+   works you see what it's doing: what it dug up, each file it reads, what it's thinking.
+
+The app is in Spanish, and so are its answers.
 
 ## Private, with one exception
 
@@ -43,8 +47,7 @@ settings stay separate. ⇧⌥Space opens the Ask window from any app, so both a
 
 Gafitas is built on [DigUp](https://github.com/ARahim3/DigUp) (MIT), [EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2)
 by Google DeepMind (Apache 2.0), [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT),
-[OpenUI](https://github.com/thesysdev/openui) (MIT) and the
-[anatomy](https://github.com/wheresryan22/anatomy) figure kit (MIT). Gafitas isn't affiliated with DigUp's author,
+[OpenUI](https://github.com/thesysdev/openui) (MIT), React (MIT) and Zod (MIT). Gafitas isn't affiliated with DigUp's author,
 Google or Apple.
 
 ## License

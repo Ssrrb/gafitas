@@ -29,21 +29,23 @@ function Places() {
             <span className="g-dot" data-tint={((list[0]!.tint ?? 0) % 4) + 1} aria-hidden="true" />
             {repo}
           </span>
-          {list.slice(0, 3).map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              className="g-loose-piece"
-              data-tint={((entry.tint ?? 0) % 4) + 1}
-              title={`${entry.repo}/${entry.path}`}
-              onClick={() => post({ type: "open", ref: entry.id, line: entry.focus ?? entry.first })}
-              onPointerEnter={() => post({ type: "hover", ref: entry.id })}
-              onPointerLeave={() => post({ type: "hover", ref: null })}
-            >
-              <code>{placeName(entry)}</code>
-            </button>
-          ))}
-          {list.length > 3 ? <span className="g-places-more">+{list.length - 3}</span> : null}
+          <span className="g-places-pieces">
+            {list.slice(0, 3).map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                className="g-loose-piece"
+                data-tint={((entry.tint ?? 0) % 4) + 1}
+                title={`${entry.repo}/${entry.path}`}
+                onClick={() => post({ type: "open", ref: entry.id, line: entry.focus ?? entry.first })}
+                onPointerEnter={() => post({ type: "hover", ref: entry.id })}
+                onPointerLeave={() => post({ type: "hover", ref: null })}
+              >
+                <code>{placeName(entry)}</code>
+              </button>
+            ))}
+            {list.length > 3 ? <span className="g-places-more">+{list.length - 3}</span> : null}
+          </span>
         </li>
       ))}
     </ul>

@@ -8,12 +8,18 @@ final class AgentRunner {
     enum Event {
         /// The model Pi answers with; `local` when it runs on this Mac (nothing is sent anywhere then).
         case model(name: String, provider: String, local: Bool)
-        case progress(String)
+        /// A tool call starting (`result` nil) or done, with its arguments: what the trail says Pi is doing.
+        case tool(name: String, args: [String: Any], result: [String: Any]?, failed: Bool)
+        /// More of the model's thinking.
+        case thinking(String)
+        /// What the model said before its program, so far (it thinks aloud there too).
+        case narration(String)
         /// A piece of the answer's program, from its `root =` on (what a model says before that is narration).
         case program(String)
         /// Places Pi's `dig` found, as the extension describes them (`d1`…).
         case refs([[String: Any]])
-        case finished
+        /// Pi has nothing more to do for this prompt; `aborted` when it was stopped.
+        case finished(aborted: Bool)
         case failed(String)
     }
 
@@ -32,6 +38,8 @@ final class AgentRunner {
     private var afterReset: String?
     /// The reply is corrected statements, not a whole program: all of it counts, not only from `root =`.
     private var raw = false
+    /// Each running tool call's arguments, by its id (the end event doesn't repeat them).
+    private var calls: [String: [String: Any]] = [:]
 
     /// Pi's command: where your login shell finds it (a GUI app gets a bare PATH), else where its installers put it.
     static func locate() -> URL? {
@@ -70,7 +78,9 @@ final class AgentRunner {
     var isRunning: Bool { process?.isRunning == true }
 
     /// Starts Pi in the first code folder (its tools' default place), reading only inside `roots`.
-    func start(pi: URL, roots: [URL], index: URL, models: URL) throws {
+    /// `digFrom`: the places Pi's `dig` hands out are numbered after this (d\(digFrom + 1)…), so a continued chat's
+    /// earlier refs keep their ids.
+    func start(pi: URL, roots: [URL], index: URL, models: URL, digFrom: Int = 0) throws {
         guard !isRunning else { return }
         let resources = Bundle.main.resourceURL!
         let process = Process()
@@ -85,6 +95,7 @@ final class AgentRunner {
             "GAFITAS_INDEX": index.path,
             "GAFITAS_ROOTS": roots.map(\.path).joined(separator: ":"),
             "DIGUP_MODELS": models.path,
+            "GAFITAS_DIG_FROM": String(digFrom),
         ]) { $1 }
         let input = Pipe(), output = Pipe()
         process.standardInput = input
@@ -176,13 +187,16 @@ final class AgentRunner {
                 prompt(message)
             } else if event["success"] as? Bool == false {
                 busy = false
-                onEvent(.failed(event["error"] as? String ?? "Pi didn't take the request"))
+                onEvent(.failed(event["error"] as? String ?? "Pi no aceptó la petición"))
+            } else if event["command"] as? String == "get_state",
+                      (event["data"] as? [String: Any])?["model"] as? [String: Any] == nil {
+                onEvent(.failed("Pi no tiene modelo: ábrelo en Terminal y elige uno con /model"))
             } else if event["command"] as? String == "get_state",
                       let model = (event["data"] as? [String: Any])?["model"] as? [String: Any] {
                 let host = (model["baseUrl"] as? String).flatMap { URL(string: $0)?.host } ?? ""
                 let provider = model["provider"] as? String ?? ""
                 let local = ["localhost", "127.0.0.1", "::1"].contains(host) || ["ollama", "lmstudio"].contains(provider)
-                onEvent(.model(name: model["name"] as? String ?? model["id"] as? String ?? "the model",
+                onEvent(.model(name: model["name"] as? String ?? model["id"] as? String ?? "el modelo",
                                provider: provider, local: local))
             }
         case "message_start":
@@ -192,25 +206,32 @@ final class AgentRunner {
             }
         case "message_update":
             guard let update = event["assistantMessageEvent"] as? [String: Any],
-                  update["type"] as? String == "text_delta", let delta = update["delta"] as? String else { return }
-            message += delta
-            emitProgram()
-        case "tool_execution_start":
-            let name = event["toolName"] as? String ?? ""
-            let args = event["args"] as? [String: Any] ?? [:]
-            switch name {
-            case "dig": onEvent(.progress("Digging up “\(args["query"] as? String ?? "")”…"))
-            case "read": onEvent(.progress("Reading \(((args["path"] as? String ?? "") as NSString).lastPathComponent)…"))
-            default: onEvent(.progress("Looking through the code…"))
+                  let delta = update["delta"] as? String else { return }
+            switch update["type"] as? String {
+            case "thinking_delta":
+                onEvent(.thinking(delta))
+            case "text_delta":
+                message += delta
+                emitProgram()
+            default:
+                break
             }
+        case "tool_execution_start":
+            let args = event["args"] as? [String: Any] ?? [:]
+            if let id = event["toolCallId"] as? String { calls[id] = args }
+            onEvent(.tool(name: event["toolName"] as? String ?? "", args: args, result: nil, failed: false))
         case "tool_execution_end":
-            if event["toolName"] as? String == "dig",
-               let refs = ((event["result"] as? [String: Any])?["details"] as? [String: Any])?["refs"] as? [[String: Any]] {
+            let name = event["toolName"] as? String ?? ""
+            let result = event["result"] as? [String: Any] ?? [:]
+            let args = (event["toolCallId"] as? String).flatMap { calls.removeValue(forKey: $0) } ?? [:]
+            onEvent(.tool(name: name, args: args, result: result, failed: event["isError"] as? Bool == true))
+            if name == "dig", let refs = (result["details"] as? [String: Any])?["refs"] as? [[String: Any]] {
                 onEvent(.refs(refs))
             }
         case "agent_settled":
             busy = false
-            onEvent(.finished)
+            if raw, sent == 0 { log("agent: the repair reply had no statements: \(message.prefix(400))") }
+            onEvent(.finished(aborted: event["aborted"] as? Bool == true))
         default:
             break
         }
@@ -221,9 +242,12 @@ final class AgentRunner {
     private func emitProgram() {
         // A statement starts a line: "root =" inside a model's thinking aloud ("Final: root first line.root = …")
         // isn't the program yet.
-        let first = raw ? message.firstRange(of: /(?m)^[A-Za-z_][A-Za-z0-9_]* *=/)
+        let first = raw ? message.firstRange(of: /(?m)^[ \t]*[A-Za-z_][A-Za-z0-9_]* *=/)
                         : message.firstRange(of: /(?m)^root *=/)
-        guard let first else { return }
+        guard let first else {
+            if !raw { onEvent(.narration(message)) }
+            return
+        }
         var program = String(message[first.lowerBound...])
         if let fence = program.range(of: "\n```") { program = String(program[..<fence.lowerBound]) }
         guard program.count > sent else { return }
@@ -237,6 +261,6 @@ final class AgentRunner {
         let wasBusy = busy
         busy = false
         log("agent: pi exited (\(status))")
-        if !stopping, wasBusy { onEvent(.failed("Pi stopped partway (exit \(status))")) }
+        if !stopping, wasBusy { onEvent(.failed("Pi se detuvo (salida \(status))")) }
     }
 }

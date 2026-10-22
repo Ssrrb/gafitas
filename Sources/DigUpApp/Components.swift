@@ -2,33 +2,59 @@ import AppKit
 import DigUpKit
 import SwiftUI
 
-/// The app's own colors, from its icon (moss tiles around an amber D, `Resources/AppIcon`): amber marks what DigUp
-/// finds (accent icons), moss is for brand moments (onboarding's glow and tiles); selection and controls follow the
-/// system accent color like any Mac app.
+/// The app's own colors, from its icon (green sunglasses on a blue wash, `Resources/AppIcon/gafitas.png`): lime is
+/// "lit", the one colour of attention (the step being explained, the live dot); the frame takes the wash's blue at
+/// very low chroma; projects are cobalt, rose and amber. Controls and focus follow the system accent like any Mac app.
+/// The answer page gets the same values (`AnswerBridge.theme()`), so window and page are one surface.
 enum Brand {
-    static let amber = Color(red: 0.949, green: 0.635, blue: 0.165)    // #F2A22A, the D
-    static let ember = Color(red: 0.851, green: 0.482, blue: 0.102)    // #D97B1A, a deeper amber that holds up on white
-    static let moss = Color(red: 0.208, green: 0.400, blue: 0.322)     // #356652, the darkest tile
-    static let leaf = Color(red: 0.310, green: 0.502, blue: 0.345)     // #4F8058
-    static let sprout = Color(red: 0.635, green: 0.780, blue: 0.557)   // #A2C78E, a light tile
-    /// Accent icons: the D's amber.
-    static let gradient = LinearGradient(colors: [amber, ember], startPoint: .top, endPoint: .bottom)
-    /// Tiles with a white symbol on them, like the icon's.
-    static let tile = LinearGradient(colors: [leaf, moss], startPoint: .top, endPoint: .bottom)
-    /// The soft glow behind onboarding's steps.
-    static let wash = LinearGradient(colors: [sprout, leaf], startPoint: .topLeading, endPoint: .bottomTrailing)
+    typealias Pair = (light: UInt32, dark: UInt32)
 
-    /// A code folder's tint in the Ask window (its chip and its places): leaf, cobalt, rose, at least
-    /// 60° of hue apart, a lighter one in dark mode. A fourth folder and on are gray.
+    static let groundHex: Pair = (0xF3F5F8, 0x17181B)
+    static let sheetHex: Pair = (0xFFFFFF, 0x1F2023)
+    static let edgeHex: Pair = (0xE3E5EA, 0x2E2F34)
+    static let textHex: Pair = (0x1D1D1F, 0xECECEC)
+    static let mutedHex: Pair = (0x5F6368, 0xA8A8AE)
+    static let fillHex: Pair = (0xEEF0F4, 0x2A2B2F)
+    static let activeHex: Pair = (0xE4E6EB, 0x2C2D32)
+    static let litHex: Pair = (0x3F9612, 0x86E04A)
+    static let litInkHex: Pair = (0x2E7D0B, 0x86E04A)
+    static let litFillHex: Pair = (0xE0FED2, 0x334527)
+    static let negativeHex: Pair = (0xC4242A, 0xE5566F)
+    /// Projects: cobalt (the icon's blue), rose, amber, at least 60° of hue apart. A fourth and on are muted.
+    static let tintHex: [Pair] = [(0x2552C9, 0x7EA2F5), (0xB8336A, 0xE77AA8), (0x9A6212, 0xE0A23E)]
+
+    static let ground = color(groundHex)
+    static let sheet = color(sheetHex)
+    static let edge = color(edgeHex)
+    /// Secondary words: 6:1 on the sheet (the system's secondary label is 3.95:1 on white).
+    static let muted = color(mutedHex)
+    static let fill = color(fillHex)
+    static let active = color(activeHex)
+    static let lit = color(litHex)
+    static let litInk = color(litInkHex)
+    static let litFill = color(litFillHex)
+    static let negative = color(negativeHex)
+
+    /// A code folder's tint (its chip, its dots, its pieces).
     static func projectTint(_ index: Int) -> Color {
-        let tints: [(light: UInt32, dark: UInt32)] = [(0x4F8058, 0xA2C78E), (0x2F6FB0, 0x6FA3E0), (0xB8336A, 0xE07AA6)]
-        guard let tint = tints[safe: index] else { return Color.secondary }
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? tint.dark : tint.light
+        tintHex[safe: index].map(color) ?? muted
+    }
+
+    static func color(_ pair: Pair) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? pair.dark : pair.light
             return NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
                            blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
         })
     }
+
+    static func hex(_ pair: Pair, dark: Bool) -> String { String(format: "#%06X", dark ? pair.dark : pair.light) }
+
+    // shortcut: DigUp's names, kept until onboarding stops using them; then delete.
+    static let amber = lit
+    static let moss = litInk
+    static let gradient = lit
+    static let wash = ground
 }
 
 /// ⇧ ⌘ Space as keycaps.
@@ -55,22 +81,7 @@ struct Keycaps: View {
     }
 }
 
-/// "L12–40" on a place: the lines that matched.
-struct PlaceBadge: View {
-    let text: String
-    var onImage = false
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 10, weight: .semibold).monospacedDigit())
-            .foregroundStyle(onImage ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(onImage ? AnyShapeStyle(.black.opacity(0.6)) : AnyShapeStyle(.quaternary)))
-    }
-}
-
-/// What a folder holds, compactly: 📷 136  🖼 104  📄 25 … (the full wording in the tooltip).
+/// What a folder holds, compactly, with the full wording in the tooltip.
 struct KindCounts: View {
     let counts: [FileKind: Int]
 
@@ -90,7 +101,7 @@ struct KindCounts: View {
         .accessibilityLabel(description)
     }
 
-    /// "136 screenshots, 104 images, 25 PDFs"
+    /// "136 capturas, 104 imágenes, 25 PDF"
     var description: String {
         FileKind.allCases.compactMap { kind in
             counts[kind].flatMap { $0 > 0 ? kind.counted($0) : nil }
@@ -108,19 +119,19 @@ private struct CompactLabel: LabelStyle {
 }
 
 extension FileKind {
-    /// "1 screenshot", "25 PDFs", "6 audio files"
+    /// "1 captura", "25 PDF", "6 audios"
     func counted(_ count: Int) -> String {
         let one = count == 1
         let noun = switch self {
-        case .screenshot: one ? "screenshot" : "screenshots"
-        case .image: one ? "image" : "images"
-        case .pdf: one ? "PDF" : "PDFs"
-        case .doc: one ? "document" : "documents"
-        case .audio: one ? "audio file" : "audio files"
-        case .video: one ? "video" : "videos"
-        case .code: one ? "code file" : "code files"
+        case .screenshot: one ? "captura" : "capturas"
+        case .image: one ? "imagen" : "imágenes"
+        case .pdf: "PDF"
+        case .doc: one ? "documento" : "documentos"
+        case .audio: one ? "audio" : "audios"
+        case .video: one ? "vídeo" : "vídeos"
+        case .code: one ? "archivo de código" : "archivos de código"
         }
-        return "\(count.formatted()) \(noun)"
+        return "\(count.formatted(.number.locale(Locale(identifier: "es")))) \(noun)"
     }
 }
 
@@ -155,7 +166,7 @@ struct SearchField: NSViewRepresentable {
         field.cell?.isScrollable = true
         field.cell?.wraps = false
         field.delegate = context.coordinator
-        field.setAccessibilityLabel("Search")
+        field.setAccessibilityLabel("Pregunta")
         onMake(field)
         return field
     }
@@ -219,11 +230,11 @@ struct ShortcutRecorder: View {
             Button { setRecording(!recording) } label: {
                 Group {
                     if recording {
-                        Text("Press the new shortcut…").foregroundStyle(.secondary)
+                        Text("Pulsa el atajo nuevo…").foregroundStyle(.secondary)
                     } else if let combo {
                         Keycaps(caps: combo.caps, size: capSize)
                     } else {
-                        Text("Click to set a shortcut").foregroundStyle(.secondary)
+                        Text("Haz clic para elegir un atajo").foregroundStyle(.secondary)
                     }
                 }
                 .font(.system(size: 13))
@@ -238,8 +249,8 @@ struct ShortcutRecorder: View {
             }
             .buttonStyle(.plain)
             .background(KeyCatcher(active: recording, onKey: handle, onResign: { setRecording(false) }))
-            .accessibilityLabel(recording ? "Recording a new shortcut" : "Shortcut \(combo?.display ?? "none"), click to change")
-            Text(problem ?? (recording ? "Esc cancels" : "Click to change"))
+            .accessibilityLabel(recording ? "Grabando un atajo nuevo" : "Atajo \(combo?.display ?? "ninguno"), haz clic para cambiarlo")
+            Text(problem ?? (recording ? "Esc cancela" : "Haz clic para cambiarlo"))
                 .font(.system(size: 11))
                 .foregroundStyle(problem == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.red))
                 .multilineTextAlignment(.center)
@@ -259,7 +270,7 @@ struct ShortcutRecorder: View {
                                                                                                .numericPad])
         if event.keyCode == 53, flags.isEmpty { return setRecording(false) }   // Esc
         guard let combo = KeyCombo(keyCode: event.keyCode, flags: flags) else {
-            problem = "Use ⌘, ⌥ or ⌃ with a key"
+            problem = "Usa ⌘, ⌥ o ⌃ con una tecla"
             return
         }
         if let why = apply(combo) {

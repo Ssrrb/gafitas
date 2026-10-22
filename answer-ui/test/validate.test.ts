@@ -37,7 +37,8 @@ describe("validate", () => {
     const base = fixture("requests-urllib3");
     const check = (program: string) => validateProgram(program, refs);
     expect(check(base.replace('j3 = Joint(p3, p4, "conn, method, url, body, headers")', 'j3 = Joint(p3, p3, "conn")'))).toContainEqual({ id: "j3", message: expect.stringContaining("to itself") });
-    expect(check(base.replace('"conn, method, url, body, headers"', '"' + "x".repeat(41) + '"'))).toContainEqual({ id: "j3", message: expect.stringContaining("at most 40") });
+    // A long label is guidance, not an error: the page clamps it, and the joint stays.
+    expect(check(base.replace('"conn, method, url, body, headers"', '"' + "x".repeat(60) + '"'))).toEqual([]);
     expect(check(base.replace('p4 = Piece("HTTPConnectionPool._make_request", "r4", "method")', 'p4 = Piece("HTTPConnectionPool._make_request", "r3:782", "method")'))).toContainEqual({ id: "p4", message: expect.stringContaining("same lines as p3") });
     expect(check(base.replace("[z1, t1]", "[z1, z2, t1]") + '\nz2 = Puzzle("Otra", [p1, p2], [j1], [s1])')).toContainEqual({ id: "z2", message: expect.stringContaining("At most 1 Puzzle") });
     const newPiece = base.replace('p4 = Piece("HTTPConnectionPool._make_request", "r4", "method")', 'p4 = NewPiece("TimedPool", "httpx", "x.py", "", "Mide")');

@@ -20,10 +20,12 @@ import SwiftUI
 ///                             -debugMenuViewAfter seconds
 ///     -debugWindow PAGE       open a window and snapshot it:
 ///                             settings:general|code|storage, settings:addcode (Code with its folders' sheet open),
-///                             onboarding:welcome|code|shortcut|ready, ask (with -debugQuery as the question, and
-///                             -debugSelect NAME to select a place,
-///                             -debugAskAnswer YES to ask for the answer and wait for it; -debugApproveProviders YES
-///                             skips the privacy sheet)
+///                             onboarding:welcome|code|shortcut|ready, ask (with -debugQuery as the question,
+///                             -debugAskAnswer YES to ask for the answer and wait for it, -debugAskChat ID to reopen a
+///                             saved chat instead, -debugAskFollowUp "…" to ask that next in the same chat,
+///                             -debugAskOpen YES to click the first piece (-debugDryOpen YES: only log where it opens),
+///                             -debugWindowSize "{980,620}"; -debugApproveProviders YES skips the privacy sheet; the
+///                             whole answer page also goes to <snapshot>-answer.png)
 ///                             (-debugCloseWindow YES closes it afterwards, to measure what closing gives back;
 ///                             -debugWindowAfter S opens it S seconds after launch, once the helper has reported)
 ///     -debugChoices "open:code;click:code/requests;add:<path>"   before the snapshot, act on the folder list of
@@ -191,35 +193,49 @@ enum DebugHooks {
             case "ask":
                 app.showAsk(question: defaults.string(forKey: "debugQuery") ?? "")
                 let ask = app.askWindow.ask
-                if let pick = defaults.string(forKey: "debugSelect") {
-                    waitUntil({ ask.dug }, deadline: Date().addingTimeInterval(30)) {
-                        if let row = ask.places.first(where: { $0.name.contains(pick) }) { ask.select(row) }
+                Opener.dryRun = defaults.bool(forKey: "debugDryOpen")
+                let reopened = defaults.string(forKey: "debugAskChat")
+                if let reopened { app.openChat(reopened) }
+                let answering = defaults.bool(forKey: "debugAskAnswer")
+                let followUp = defaults.string(forKey: "debugAskFollowUp")
+                var shot = false
+                let settled = { ask.answer == .done || { if case .failed = ask.answer { true } else { false } }() }
+                // The figure settles, then WebKit draws it, on screen and as the whole page.
+                let capture = {
+                    log("ask: answer \(ask.answer)")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        if defaults.bool(forKey: "debugAskOpen") {
+                            ask.bridge.webView.evaluateJavaScript("document.querySelector('button.g-tile')?.click()")
+                        }
+                        app.askWindow.captureAnswer { shot = true }
                     }
                 }
-                // -debugAskAnswer YES: ask for the answer too, and wait for it (and the page's own picture).
-                let answering = defaults.bool(forKey: "debugAskAnswer")
-                var shot = false
+                let thenFollowUp = {
+                    guard let followUp else { return capture() }
+                    ask.followUp = followUp
+                    ask.sendFollowUp()
+                    waitUntil({ settled() }, deadline: Date().addingTimeInterval(300)) { capture() }
+                }
                 if answering {
                     waitUntil({ ask.dug }, deadline: Date().addingTimeInterval(30)) { ask.askNow() }
-                    waitUntil({ ask.answer == .done || { if case .failed = ask.answer { true } else { false } }() },
-                              deadline: Date().addingTimeInterval(300)) {
-                        log("ask: answer \(ask.answer) · \(ask.progress)")
-                        // The figure's motion settles, then WebKit draws it for the snapshot.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            app.askWindow.captureAnswer { shot = true }
-                        }
+                    waitUntil({ ask.chat != nil && settled() }, deadline: Date().addingTimeInterval(300), then: thenFollowUp)
+                } else if reopened != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { thenFollowUp() }
+                }
+                loaded = { answering || reopened != nil ? shot : ask.trimmed.isEmpty || ask.dug }
+                draw = { url in
+                    try app.askWindow.snapshot(to: url)
+                    if let page = app.askWindow.pageShot, let full = snapshotPath("answer") {
+                        try Snapshot.write(page, background: NSColor(Brand.sheet), appearance: NSApp.effectiveAppearance, to: full)
+                        log("snapshot: the whole answer → \(full.path)")
                     }
                 }
-                loaded = {
-                    (ask.trimmed.isEmpty || (ask.dug && (defaults.string(forKey: "debugSelect") == nil || ask.navigated)))
-                        && (!answering || shot)
-                }
-                draw = { try app.askWindow.snapshot(to: $0) }
                 close = { app.askWindow.close() }
             default:
                 return log("window: don't know \"\(page)\"")
             }
-            waitUntil(loaded, deadline: Date().addingTimeInterval(defaults.bool(forKey: "debugAskAnswer") ? 330 : 30)) {
+            let long = defaults.bool(forKey: "debugAskAnswer") || defaults.string(forKey: "debugAskFollowUp") != nil
+            waitUntil(loaded, deadline: Date().addingTimeInterval(long ? 660 : 30)) {
                 log("window: \(page) loaded in \(ms(since: started)) (after a 0.5 s launch delay)")
                 if let list = choices() { act(on: list) }
                 waitUntil({ choices()?.estimatesDone ?? true }, deadline: Date().addingTimeInterval(30)) {

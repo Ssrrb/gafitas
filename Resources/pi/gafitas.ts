@@ -7,7 +7,7 @@
  * Gafitas says it sends.
  *
  * Environment: GAFITAS_DIGUP (the `digup` helper), GAFITAS_INDEX (the index folder), GAFITAS_ROOTS (the code
- * folders, ":"-separated), DIGUP_MODELS (the model folder). Without them it uses the installed app's defaults.
+ * folders, ":"-separated), DIGUP_MODELS (the model folder), GAFITAS_DIG_FROM (the last d-ref a continued chat has). Without them it uses the installed app's defaults.
  */
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
@@ -76,7 +76,8 @@ function search(query: string): Promise<any[]> {
 }
 
 export default function (pi: ExtensionAPI) {
-	let dug = 0; // refs handed out this session: d1, d2…
+	// Refs handed out since Pi started: d1, d2… A continued chat starts after the ones it already cites.
+	let dug = Number(process.env.GAFITAS_DIG_FROM ?? 0) || 0;
 
 	pi.registerTool({
 		name: "dig",

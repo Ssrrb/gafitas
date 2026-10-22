@@ -71,10 +71,14 @@ function Puzzle({ model }: { model: PuzzleModel }) {
   const width = useWidth(stage);
   const [step, setStep] = React.useState(0);
   const [hover, setHover] = React.useState<number | null>(null);
-  const [enter] = React.useState(() => !turn.replay && !isStill() && !entered.has(turn.key));
+  const [enter, setEnter] = React.useState(() => !turn.replay && !isStill() && !entered.has(turn.key));
   React.useEffect(() => {
     if (turn.key) entered.add(turn.key);
-  }, [turn.key]);
+    // WebKit pauses animations outside the viewport: the entrance ends by the clock too, so no piece stays hidden.
+    if (!enter) return;
+    const timer = window.setTimeout(() => setEnter(false), 700);
+    return () => window.clearTimeout(timer);
+  }, [turn.key, enter]);
 
   const L: Layout = React.useMemo(
     () =>

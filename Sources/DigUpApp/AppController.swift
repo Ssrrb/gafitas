@@ -72,7 +72,6 @@ final class AppController {
             log("hotkey: can't read \"\(model.settings.hotkey)\" (try opt+shift+space)")
         }
 
-        Previews.shared.passage = { [engine] id, code in await engine.text(ofSegment: id, code: code) }
         CodeEditor.current = CodeEditor.chosen(model.settings.codeEditor)
         download.onReady = { [weak self] in self?.engine.modelArrived() }
         engine.start()

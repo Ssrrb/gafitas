@@ -4,6 +4,7 @@ import { Others } from "./components/Others";
 import { TrailView } from "./components/Trail";
 import { library } from "./library";
 import { post } from "./post";
+import { isStill } from "./still";
 import { S } from "./strings";
 import { RefsContext, SelectedContext, TurnContext, useThread, type Turn } from "./store";
 import { validateProgram, type AnswerError } from "./validate";
@@ -29,13 +30,21 @@ function TurnView({ turn, chat, first, last, refs }: { turn: Turn; chat: number;
     const key = JSON.stringify([turn.final, errors]);
     if (key === lastPosted.current) return;
     lastPosted.current = key;
-    post(turn.final ? { type: "errors", turn: turn.id, errors, final: true } : { type: "errors", turn: turn.id, errors });
+    post(turn.final ? { type: "errors", turn: turn.id, errors, final: true, program: turn.text } : { type: "errors", turn: turn.id, errors, program: turn.text });
   }, [turn.phase, turn.text, turn.final, turn.dropped, turn.replay, turn.id, refs]);
+
+  // A follow-up brings its question to the top of the sheet; a reopened chat opens at its last turn. The view never
+  // follows the stream after that, so it doesn't fight your scrolling.
+  const section = React.useRef<HTMLElement>(null);
+  React.useEffect(() => {
+    if (turn.replay ? last && !first : !first) section.current?.scrollIntoView({ block: "start", behavior: turn.replay || isStill() ? "auto" : "smooth" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const Heading = first ? "h1" : "h2";
   const context = React.useMemo(() => ({ key: `${chat}:${turn.id}`, replay: turn.replay }), [chat, turn.id, turn.replay]);
   return (
-    <section className="g-turn" aria-label={turn.question || undefined}>
+    <section ref={section} className="g-turn" aria-label={turn.question || undefined}>
       {turn.question ? <Heading className="g-question">{turn.question}</Heading> : null}
       <TrailView trail={turn.trail} live={turn.phase !== "done" && !turn.replay} />
       <TurnContext.Provider value={context}>

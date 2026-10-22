@@ -61,35 +61,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The menu bar while a window is open (the Dock icon shows then). It also gives text fields ⌘C/⌘V/⌘A/⌘Z.
     private static func makeMainMenu(_ app: AppController) -> NSMenu {
         let mainMenu = NSMenu()
+        let ask = { [weak app] in app?.askWindow.ask }
 
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About Gafitas", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+        appMenu.addItem(withTitle: "Acerca de Gafitas", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
                         keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(ActionMenuItem("Settings…", key: ",") { [weak app] in app?.showSettings() })
+        appMenu.addItem(ActionMenuItem("Ajustes…", key: ",") { [weak app] in app?.showSettings() })
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Hide Gafitas", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(withTitle: "Quit Gafitas", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Ocultar Gafitas", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let others = appMenu.addItem(withTitle: "Ocultar otros", action: #selector(NSApplication.hideOtherApplications(_:)),
+                                     keyEquivalent: "h")
+        others.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(withTitle: "Mostrar todo", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Salir de Gafitas", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
-        let fileMenu = NSMenu(title: "File")
-        fileMenu.addItem(ActionMenuItem("Ask About Your Code…", key: "n") { [weak app] in app?.showAsk() })
-        fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        let fileMenu = NSMenu(title: "Archivo")
+        fileMenu.addItem(ActionMenuItem("Nueva pregunta", key: "n") { [weak app] in
+            app?.showAsk()
+            ask()?.newQuestion()
+        })
+        let add = ActionMenuItem("Añadir carpeta de proyecto…", key: "o") { [weak app] in app?.chooseCodeFolders() }
+        add.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(add)
+        // ⌘⌫ is the window's own (only while no text is being edited): a menu key would take it from the fields.
+        fileMenu.addItem(ActionMenuItem("Eliminar conversación…", key: "") {
+            if let id = ask()?.chat?.id { ask()?.confirmDelete(id) }
+        })
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Cerrar", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 
-        let editMenu = NSMenu(title: "Edit")
-        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        let editMenu = NSMenu(title: "Edición")
+        editMenu.addItem(withTitle: "Deshacer", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Rehacer", action: Selector(("redo:")), keyEquivalent: "Z")
         editMenu.addItem(.separator())
-        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(withTitle: "Cortar", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copiar", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Pegar", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Seleccionar todo", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(.separator())
+        editMenu.addItem(ActionMenuItem("Buscar en el historial", key: "f") { ask()?.focusHistorySearch() })
 
-        let windowMenu = NSMenu(title: "Window")
-        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "")
+        let viewMenu = NSMenu(title: "Ver")
+        let sidebar = ActionMenuItem("Mostrar u ocultar el historial", key: "s") { ask()?.sidebarShown.toggle() }
+        sidebar.keyEquivalentModifierMask = [.command, .control]
+        viewMenu.addItem(sidebar)
+
+        let windowMenu = NSMenu(title: "Ventana")
+        windowMenu.addItem(withTitle: "Minimizar", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(ActionMenuItem("Conversación más reciente", key: "[") { ask()?.stepChat(by: -1) })
+        windowMenu.addItem(ActionMenuItem("Conversación más antigua", key: "]") { ask()?.stepChat(by: 1) })
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Traer todo al frente", action: #selector(NSApplication.arrangeInFront(_:)),
+                           keyEquivalent: "")
         NSApp.windowsMenu = windowMenu
 
-        for submenu in [appMenu, fileMenu, editMenu, windowMenu] {
+        for submenu in [appMenu, fileMenu, editMenu, viewMenu, windowMenu] {
             let item = NSMenuItem()
             item.submenu = submenu
             mainMenu.addItem(item)

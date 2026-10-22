@@ -39,6 +39,26 @@ enum Snapshot {
         try png.write(to: url)
     }
 
+    /// A picture (the whole answer page) into a PNG at 2×, on `background`.
+    static func write(_ image: NSImage, background: NSColor, appearance: NSAppearance, to url: URL) throws {
+        let size = image.size
+        guard let output = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2),
+                                            pixelsHigh: Int(size.height * 2), bitsPerSample: 8, samplesPerPixel: 4,
+                                            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                            bytesPerRow: 0, bitsPerPixel: 0) else { throw Failure.noBitmap }
+        output.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: output)
+        appearance.performAsCurrentDrawingAppearance {
+            background.setFill()
+            NSRect(origin: .zero, size: size).fill()
+        }
+        image.draw(in: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let png = output.representation(using: .png, properties: [:]) else { throw Failure.noBitmap }
+        try png.write(to: url)
+    }
+
     /// A window that's on screen, as the window server shows it, content drawn by other processes included (Quick
     /// Look's previews are). An app may always capture its own windows. CGWindowListCreateImage is gone from the
     /// SDK's Swift interface, hence the lookup.

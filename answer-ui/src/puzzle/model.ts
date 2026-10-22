@@ -7,7 +7,7 @@ import { kindLabel } from "../strings";
 
 export const PIECE_TYPES = ["Piece", "NewPiece", "Idea"] as const;
 export type PieceType = (typeof PIECE_TYPES)[number];
-export const PUZZLE_LIMITS = { pieces: [2, 6], projects: 3, newPieces: 2, steps: [1, 6], name: 32, label: 40, text: 160, loose: 1 } as const;
+export const PUZZLE_LIMITS = { pieces: [2, 6], projects: 3, newPieces: 2, steps: [1, 6], loose: 1 } as const;
 
 export interface PuzzlePiece {
   id: string;
@@ -93,8 +93,9 @@ export function readPuzzle(node: ElementNode, refs: RefTable): PuzzleModel {
       continue;
     }
     const name = str(p.name);
+    // Lengths are the prompt's guidance, not errors: the page clamps long words, and dropping a piece for its length
+    // would break the picture more than a long name does.
     if (!name) add(id, `${type} needs a name.`);
-    else if (name.length > PUZZLE_LIMITS.name) add(id, `${id}'s name is ${name.length} characters; write the code name, at most ${PUZZLE_LIMITS.name}.`);
     const piece: PuzzlePiece = { id, type, name, band: "", tint: 0, kind: "", note: str(p.note), code: "", path: "" };
     if (type === "Piece" || type === "NewPiece") {
       if (!refs.size) add(id, `There are no refs, so every piece is an Idea(name, note), not a ${type}.`);
@@ -165,7 +166,6 @@ export function readPuzzle(node: ElementNode, refs: RefTable): PuzzleModel {
     }
     pairs.add(pair);
     if (!label) add(id, `${id} needs a label: what crosses the joint.`);
-    else if (label.length > PUZZLE_LIMITS.label) add(id, `${id}'s label is ${label.length} characters; at most ${PUZZLE_LIMITS.label}.`);
     joints.push({ id, from, to, label });
   }
   if (joints.length > pieces.length) add(owner, `A Puzzle has at most one Joint per piece (${pieces.length}), not ${joints.length}.`);
@@ -191,9 +191,7 @@ export function readPuzzle(node: ElementNode, refs: RefTable): PuzzleModel {
       else if (jointIndex.has(value.statementId)) lit = { joint: jointIndex.get(value.statementId)! };
     }
     if (!lit) add(id, `${id} must light a piece or a joint of this Puzzle: write its id, like p2 or j1.`);
-    const text = str(raw.props.text);
-    if (text.length > PUZZLE_LIMITS.text) add(id, `${id}'s text is ${text.length} characters; at most ${PUZZLE_LIMITS.text} (about 20 words).`);
-    steps.push({ id, lit, text });
+    steps.push({ id, lit, text: str(raw.props.text) });
   }
   const [fewest, mostSteps] = PUZZLE_LIMITS.steps;
   if (steps.length < fewest || steps.length > mostSteps) add(owner, `A Puzzle needs ${fewest} to ${mostSteps} Steps, not ${steps.length}.`);

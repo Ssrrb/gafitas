@@ -1,7 +1,6 @@
 import AppKit
 import DigUpKit
 import Observation
-import Quartz
 import SwiftUI
 
 /// The Ask window: a question about your code, the places in your projects that answer it (dug up as you type, on
@@ -9,7 +8,7 @@ import SwiftUI
 final class AskWindowController: NSObject, NSWindowDelegate {
     let ask: AskModel
     private unowned let app: AppController
-    private var window: QuickLookWindow?
+    private var window: NSWindow?
     private var keyMonitor: Any?
     private var mouseMonitor: Any?
 
@@ -33,11 +32,11 @@ final class AskWindowController: NSObject, NSWindowDelegate {
         window?.close()
     }
 
-    private func makeWindow() -> QuickLookWindow {
-        let window = QuickLookWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 780),
-                                     styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-                                     backing: .buffered, defer: false)
-        // As the search window: an empty unified toolbar makes the title bar tall enough for the question field.
+    private func makeWindow() -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 780),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                              backing: .buffered, defer: false)
+        // An empty unified toolbar makes the title bar tall enough for the question field.
         window.toolbar = NSToolbar(identifier: "GafitasAsk")
         window.toolbarStyle = .unified
         window.titlebarAppearsTransparent = true
@@ -56,9 +55,6 @@ final class AskWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared().isVisible {
-            QLPreviewPanel.shared().orderOut(nil)
-        }
         removeKeyMonitor()
         ask.closeAgent()
         window?.contentView = nil
@@ -88,13 +84,10 @@ final class AskWindowController: NSObject, NSWindowDelegate {
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let window else { return event }
-            let previewing = QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared().isVisible
-                && event.window === QLPreviewPanel.shared() && QLPreviewPanel.shared().dataSource === window
-            guard event.window === window || previewing else { return event }
+            guard let self, let window, event.window === window else { return event }
             return handle(event) ? nil : event
         }
-        // A click in the question field: the arrows and Space are the text's again.
+        // A click in the question field: the arrows are the text's again.
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self, let window, event.window === window, let field = ask.field else { return event }
             if field.bounds.contains(field.convert(event.locationInWindow, from: nil)) { ask.editing() }
@@ -108,13 +101,12 @@ final class AskWindowController: NSObject, NSWindowDelegate {
         mouseMonitor = nil
     }
 
-    /// ↑ ↓ move through the places (and from then on ↩ opens, ⌫ ignores, Space previews); ↩ in the field asks;
+    /// ↑ ↓ move through the places (and from then on ↩ opens, ⌫ ignores); ↩ in the field asks;
     /// ⌘↩ reveals, ⌘C copies the file, ⇧⌘C its lines, ⌘Z brings back what was ignored, ⌘L goes to the question.
     private func handle(_ event: NSEvent) -> Bool {
         if (ask.field?.currentEditor() as? NSTextView)?.hasMarkedText() == true { return false }
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             .subtracting([.capsLock, .numericPad, .function])
-        let previewing = QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared().isVisible
         let row = ask.selectedRow
         switch event.keyCode {
         case 125, 126 where modifiers.isEmpty:   // ↓ ↑
@@ -139,12 +131,6 @@ final class AskWindowController: NSObject, NSWindowDelegate {
             ask.ignore(row)
         case 6 where modifiers == .command && !ask.ignored.isEmpty && ask.navigated:   // ⌘Z
             ask.undoIgnore()
-        case 49 where modifiers.isEmpty && (ask.navigated || previewing) && row != nil:   // Space
-            toggleQuickLook()
-        case 16 where modifiers == .command:   // ⌘Y
-            toggleQuickLook()
-        case 18, 19 where modifiers == .command:   // ⌘1 answer, ⌘2 map
-            ask.tab = event.keyCode == 18 ? .answer : .map
         case 38 where modifiers == .command:   // ⌘J
             ask.followUpField?.window?.makeFirstResponder(ask.followUpField)
         case 47 where modifiers == .command && ask.answer == .working:   // ⌘.
@@ -160,9 +146,7 @@ final class AskWindowController: NSObject, NSWindowDelegate {
             guard let row else { return false }
             ask.copyLines(row)
         case 53:   // Esc
-            if previewing {
-                QLPreviewPanel.shared().orderOut(nil)
-            } else if ask.answer == .working {
+            if ask.answer == .working {
                 ask.stop()
             } else if !ask.question.isEmpty {
                 ask.question = ""
@@ -172,23 +156,7 @@ final class AskWindowController: NSObject, NSWindowDelegate {
         default:
             return false
         }
-        if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared().isVisible { updateQuickLook() }
         return true
-    }
-
-    private func toggleQuickLook() {
-        let panel = QLPreviewPanel.shared()!
-        if QLPreviewPanel.sharedPreviewPanelExists(), panel.isVisible {
-            panel.orderOut(nil)
-        } else if ask.selectedRow != nil {
-            updateQuickLook()
-            panel.makeKeyAndOrderFront(nil)
-        }
-    }
-
-    private func updateQuickLook() {
-        window?.previewURL = ask.selectedRow?.url
-        QLPreviewPanel.shared().reloadData()
     }
 }
 
@@ -200,52 +168,6 @@ struct Project: Identifiable, Equatable {
     let index: Int
     var id: String { path }
     var name: String { (path as NSString).lastPathComponent }
-}
-
-enum AskTab: Hashable {
-    case answer, map
-}
-
-/// The code map, ready to draw: each vector's dot from 0 to 1 across the sheet, its file and its folder's tint.
-struct MapData {
-    struct Dot {
-        let x: CGFloat
-        let y: CGFloat
-        let segment: Int64
-        let path: String
-        let tint: Int
-    }
-
-    let code: CodeMap
-    let dots: [Dot]
-    private let minimum: (x: Float, y: Float)
-    private let span: (x: Float, y: Float)
-
-    init(_ code: CodeMap, paths: [Int64: String], projects: [Project]) {
-        self.code = code
-        // The middle 98% of each axis fills the sheet: one far-off stretch shouldn't squeeze the rest into a corner.
-        func range(_ values: [Float]) -> (Float, Float) {
-            let sorted = values.sorted()
-            guard !sorted.isEmpty else { return (0, 1) }
-            let low = sorted[Int(Double(sorted.count - 1) * 0.01)], high = sorted[Int(Double(sorted.count - 1) * 0.99)]
-            return (low, max(high - low, 1e-6))
-        }
-        let (x0, xs) = range(code.x), (y0, ys) = range(code.y)
-        minimum = (x0, y0)
-        span = (xs, ys)
-        dots = code.x.indices.map { index in
-            let path = paths[code.files[index]] ?? ""
-            let tint = projects.filter { path.hasPrefix($0.path + "/") }.max { $0.path.count < $1.path.count }?.index ?? 99
-            return Dot(x: CGFloat(min(max((code.x[index] - x0) / xs, 0), 1)),
-                       y: CGFloat(min(max((code.y[index] - y0) / ys, 0), 1)),
-                       segment: code.segments[index], path: path, tint: tint)
-        }
-    }
-
-    func normalized(_ point: (x: Float, y: Float)) -> CGPoint {
-        CGPoint(x: CGFloat(min(max((point.x - minimum.x) / span.x, 0), 1)),
-                y: CGFloat(min(max((point.y - minimum.y) / span.y, 0), 1)))
-    }
 }
 
 /// Where the answer is.
@@ -297,16 +219,8 @@ final class AskModel {
     var selection: String? {
         didSet { if selection != oldValue { bridge.select(selection.flatMap { refIDs[$0] }) } }
     }
-    /// You moved through the places with the arrow keys since the last edit: ↩, ⌫ and Space act on them then.
+    /// You moved through the places with the arrow keys since the last edit: ↩ and ⌫ act on them then.
     private(set) var navigated = false
-
-    /// The sheet shows the answer, or the map of the code (⌘1, ⌘2).
-    var tab = AskTab.answer {
-        didSet { if tab == .map, map == nil { loadMap() } }
-    }
-    private(set) var map: MapData?
-    /// The question's vector, for its place on the map.
-    private(set) var questionVector: [Float]?
 
     // The answer.
     private(set) var answer = AnswerPhase.idle
@@ -402,19 +316,6 @@ final class AskModel {
             let summaries = await engine.rootSummaries(code: true)
             projects = summaries.enumerated().map { Project(path: $1.path, files: $1.indexed, index: $0) }
         }
-    }
-
-    func loadMap() {
-        Task {
-            guard let (code, paths) = await engine.codeMap() else { return }
-            map = MapData(code, paths: paths, projects: projects)
-        }
-    }
-
-    /// Where the question lands on the map, once it's dug up.
-    var questionPlace: CGPoint? {
-        guard let map, let questionVector, !trimmed.isEmpty else { return nil }
-        return map.normalized(map.code.place(questionVector))
     }
 
     func toggle(_ project: Project) {
@@ -748,11 +649,10 @@ final class AskModel {
         engine.prewarm()
         engine.embedAhead(text, code: true)
         let skipped = leftOut
-        let showAt = ContinuousClock.now + (now ? .zero : SearchPanelController.typingPause)
+        let showAt = ContinuousClock.now + (now ? .zero : SearchField.typingPause)
         task = Task {
             let vector = await engine.embedQuery(text, code: true)
             guard !Task.isCancelled, current == generation else { return }
-            questionVector = vector?.values
             let hits = await engine.search(text, vector: vector, prefixLast: false, limit: 40, code: true,
                                            zGate: Self.zGate)
             try? await Task.sleep(until: showAt, tolerance: .milliseconds(1), clock: .continuous)

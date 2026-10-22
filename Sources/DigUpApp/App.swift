@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let settings = AppSettings.load()
         AppLog.shared.open(in: settings.indexDirectory)
-        log("launch pid \(getpid()): roots \(settings.roots.map { tildePath($0.path) }) · "
+        log("launch pid \(getpid()): code \(settings.codeRoots.map { tildePath($0.path) }) · "
             + "index \(tildePath(settings.indexDirectory.path)) · models \(tildePath(settings.modelsDirectory.path))")
         let (atLogin, why) = Launch.atLogin()   // while the open-application event is still the current one
         let showWindow = !atLogin && !DebugHooks.drivesUI
@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Opening the app again (from Finder or Spotlight) while it runs: show its window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { app?.showSearchWindow() }
+        if !flag { app?.showAsk() }
         return true
     }
 
@@ -65,9 +65,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Gafitas", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
                         keyEquivalent: "")
-        if Updates.enabled {
-            appMenu.addItem(ActionMenuItem("Check for Updates…") { [weak app] in app?.updates.checkNow() })
-        }
         appMenu.addItem(.separator())
         appMenu.addItem(ActionMenuItem("Settings…", key: ",") { [weak app] in app?.showSettings() })
         appMenu.addItem(.separator())
@@ -75,8 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "Quit Gafitas", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         let fileMenu = NSMenu(title: "File")
-        fileMenu.addItem(ActionMenuItem("New Search", key: "n") { [weak app] in app?.showSearchWindow(query: "") })
-        fileMenu.addItem(ActionMenuItem("Ask About Your Code…", key: "N") { [weak app] in app?.showAsk() })
+        fileMenu.addItem(ActionMenuItem("Ask About Your Code…", key: "n") { [weak app] in app?.showAsk() })
         fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 
         let editMenu = NSMenu(title: "Edit")
@@ -103,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 /// How DigUp was launched. At login (its login item) it stays in the menu bar; opened by hand (Finder, Spotlight,
-/// Launchpad, after an update) it shows its window, so opening it never looks like nothing happened.
+/// Launchpad) it shows its window, so opening it never looks like nothing happened.
 enum Launch {
     /// Whether this is the launch at login, and what says so. Call it while the app finishes launching: the
     /// open-application event is still the current one then.
@@ -141,7 +137,7 @@ enum Launch {
 }
 
 /// Brings DigUp to the front. Plain `NSApp.activate()` is only a request that macOS may decline while another
-/// app is in use; the panel needs real activation so App Nap doesn't slow search down.
+/// app is in use; the hotkey needs real activation so App Nap doesn't slow search down.
 func bringAppToFront() {
     (NSApp as any ForcedActivation).activate(ignoringOtherApps: true)
 }

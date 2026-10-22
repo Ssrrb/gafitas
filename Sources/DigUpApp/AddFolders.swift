@@ -2,23 +2,18 @@ import AppKit
 import DigUpKit
 import SwiftUI
 
-/// Settings → Folders → Add Folders…: a sheet like onboarding's folder step. It lists the usual folders that aren't
-/// searched yet and any other folder you choose, each with what's in it, how long its first pass takes and its
-/// subfolders; nothing changes until Add. With nothing left to suggest, it starts from the open panel.
-///
-/// With `code`, Settings → Code's: folders for code search, each opening to its repos, with how long reading them
-/// takes and how much room their index needs.
+/// Settings → Code → Add Folders…: a sheet like onboarding's code step. It lists the folders with code that aren't
+/// searched yet and any other folder you choose, each opening to its repos, with how long reading them takes and how
+/// much room their index needs; nothing changes until Add. With nothing left to suggest, it starts from the open panel.
 final class AddFoldersController {
     private unowned let app: AppController
     private(set) var choices: FolderChoices?
     private var sheet: NSWindow?
-    let code: Bool
     /// The folders changed (Settings refreshes its list).
     var onAdded: () -> Void = {}
 
-    init(app: AppController, code: Bool = false) {
+    init(app: AppController) {
         self.app = app
-        self.code = code
     }
 
     var isOpen: Bool { choices != nil }
@@ -26,13 +21,9 @@ final class AddFoldersController {
     func begin(on window: NSWindow?) {
         guard choices == nil else { return }
         let settings = app.model.settings
-        let selection = code
-            ? FolderSelection(skipped: settings.codeExcluded.map(\.path), kept: settings.codeRoots.map(\.path))
-            : FolderSelection(skipped: settings.excludedFolders.map(\.path), kept: settings.roots.map(\.path))
-        let suggestions = (code ? CodeFolders.candidates(searched: settings.roots) : OnboardingState.candidates())
-            .filter { !selection.isSearched($0.path) }
-        let choices = FolderChoices(rows: suggestions, selection: selection, types: code ? [] : settings.excludedTypes,
-                                    code: code)
+        let selection = FolderSelection(skipped: settings.codeExcluded.map(\.path), kept: settings.codeRoots.map(\.path))
+        let suggestions = CodeFolders.candidates().filter { !selection.isSearched($0.path) }
+        let choices = FolderChoices(rows: suggestions, selection: selection, types: [], code: true)
         self.choices = choices
         // Snapshot runs never put an open panel on screen (-debugChoices picks folders instead).
         guard suggestions.isEmpty, !AppController.offscreen else { return present(choices, on: window) }
@@ -54,7 +45,7 @@ final class AddFoldersController {
                                   add: { [weak self] in self?.add() })
         let sheet = NSWindow(contentViewController: NSHostingController(rootView: view))
         sheet.styleMask = [.titled]
-        sheet.title = code ? "Code Folders" : "Add Folders"
+        sheet.title = "Code Folders"
         self.sheet = sheet
         choices.startEstimates()
         log("add folders: \(choices.rows.count) to choose from")
@@ -71,13 +62,9 @@ final class AddFoldersController {
 
     func add() {
         guard let choices else { return }
-        log("add \(code ? "code " : "")folders: \(choices.roots.map { tildePath($0.path) })"
+        log("add code folders: \(choices.roots.map { tildePath($0.path) })"
             + (choices.skipped.isEmpty ? "" : " minus \(choices.skipped.map { tildePath($0.path) })"))
-        if code {
-            app.applyCodeFolders(choices.roots, excluded: choices.skipped)
-        } else {
-            app.applyFolders(choices.roots, excluded: choices.skipped)
-        }
+        app.applyCodeFolders(choices.roots, excluded: choices.skipped)
         end()
         onAdded()
     }
@@ -104,19 +91,12 @@ private struct AddFoldersView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
-                if choices.code {
-                    StepTitle(title: "Search your code",
-                              subtitle: "Pick the folders that hold your projects; open one to pick among its repos. "
-                                  + "Gafitas reads each once, then what changes. Code is searched on its own: type "
-                                  + "code: in the search panel.")
-                } else {
-                    StepTitle(title: "Add folders to search",
-                              subtitle: "Gafitas reads a new folder once, then keeps up with what changes in it. "
-                                  + "Open a folder to pick some of its subfolders.")
-                }
+                StepTitle(title: "Search your code",
+                          subtitle: "Pick the folders that hold your projects; open one to pick among its repos. "
+                              + "Gafitas reads each once, then what changes.")
                 ScrollView {
                     FolderList(choices: choices, addTitle: "Choose Another Folder…", add: pick)
-                    if choices.code { CodeFolderNote().padding(.top, 8) }
+                    CodeFolderNote().padding(.top, 8)
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
@@ -147,12 +127,7 @@ private struct AddFoldersView: View {
         guard choices.changesSomething else { return "Check the folders to add" }
         guard choices.estimatesDone else { return "Looking at the folders…" }
         let time = choices.totalSeconds < 1 ? "under a second" : "about \(roughDuration(choices.totalSeconds))"
-        if choices.code {
-            return "Adds \(time) of indexing and \(roughBytes(choices.totalBytes))"
-        }
-        let later = choices.totalLaterSeconds
-        return "Adds \(time) of indexing"
-            + (later >= 30 ? ", and \(roughDuration(later)) more for long files" : "")
+        return "Adds \(time) of indexing and \(roughBytes(choices.totalBytes))"
     }
 }
 

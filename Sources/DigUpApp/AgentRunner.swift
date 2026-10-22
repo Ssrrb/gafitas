@@ -81,7 +81,6 @@ final class AgentRunner {
                              "--append-system-prompt", resources.appendingPathComponent("answer-ui/system-prompt.txt").path]
         process.currentDirectoryURL = roots.first ?? FileManager.default.temporaryDirectory
         process.environment = Self.environment.merging([
-            "GAFITAS_MODE": "app",
             "GAFITAS_DIGUP": Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/digup").path,
             "GAFITAS_INDEX": index.path,
             "GAFITAS_ROOTS": roots.map(\.path).joined(separator: ":"),

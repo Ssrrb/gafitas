@@ -1,11 +1,10 @@
 /**
  * Gafitas for Pi: a `dig` tool that finds the code in your projects that already does something, through Gafitas's
- * code index on this Mac (EmbeddingGemma 2, the `digup` helper), and two guards.
+ * code index on this Mac (EmbeddingGemma 2, the `digup` helper), and a guard.
  *
- * - In the Gafitas app (GAFITAS_MODE=app) Pi explains, it doesn't change anything: Gafitas starts it with only `dig`
- *   and the read-only tools, and this keeps those inside the code folders you chose (no hidden folders, no keys), so
- *   what can be sent to the model is what Gafitas says it sends.
- * - In the terminal (pi -e gafitas.ts), `write` and `edit` wait until `dig` has looked for code that already does it.
+ * Pi explains, it doesn't change anything: the Gafitas app starts it with only `dig` and the read-only tools, and this
+ * keeps those inside the code folders you chose (no hidden folders, no keys), so what can be sent to the model is what
+ * Gafitas says it sends.
  *
  * Environment: GAFITAS_DIGUP (the `digup` helper), GAFITAS_INDEX (the index folder), GAFITAS_ROOTS (the code
  * folders, ":"-separated), DIGUP_MODELS (the model folder). Without them it uses the installed app's defaults.
@@ -20,7 +19,6 @@ import { Type } from "typebox";
 const support = `${homedir()}/Library/Application Support/Gafitas`;
 const digup = process.env.GAFITAS_DIGUP ?? "/Applications/Gafitas.app/Contents/Helpers/digup";
 const index = process.env.GAFITAS_INDEX ?? `${support}/index.noindex`;
-const appMode = process.env.GAFITAS_MODE === "app";
 const roots = (process.env.GAFITAS_ROOTS ?? "").split(":").filter(Boolean).map(real);
 
 /** At most this many places a dig, and this many lines of each: enough to reason about, small enough to send. */
@@ -79,7 +77,6 @@ function search(query: string): Promise<any[]> {
 
 export default function (pi: ExtensionAPI) {
 	let dug = 0; // refs handed out this session: d1, d2…
-	let looked = false;
 
 	pi.registerTool({
 		name: "dig",
@@ -93,7 +90,6 @@ export default function (pi: ExtensionAPI) {
 			project: Type.Optional(Type.String({ description: "Only this project (a repo or code folder's name)" })),
 		}),
 		async execute(_id, params) {
-			looked = true;
 			const hits = await search(params.query);
 			const refs: Ref[] = [];
 			for (const hit of hits) {
@@ -130,17 +126,11 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
-		if (appMode && ["read", "grep", "find", "ls"].includes(event.toolName)) {
+		if (["read", "grep", "find", "ls"].includes(event.toolName)) {
 			const path = (event.input as { path?: string }).path ?? ".";
 			if (!allowed(path, ctx.cwd)) {
 				return { block: true, reason: `${path} is outside the code folders Gafitas may read` };
 			}
-		}
-		if (!appMode && (event.toolName === "write" || event.toolName === "edit") && !looked) {
-			return {
-				block: true,
-				reason: "Call dig first: this may already exist in the user's projects. Reuse or adapt it if it does.",
-			};
 		}
 		return undefined;
 	});

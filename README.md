@@ -6,7 +6,7 @@ together.</p>
 
 Gafitas ("little glasses") is a fork of [DigUp](https://github.com/ARahim3/DigUp) by Abdur Rahim. DigUp searches the
 files on your Mac by what's in them, with Google DeepMind's EmbeddingGemma 2 running locally. Gafitas keeps that engine
-and adds an Ask window for code:
+and points it at your code, in one Ask window:
 
 1. **Dig up.** Describe a task or ask a question ("How can I connect the Hermes skill creation to my app harness?").
    Gafitas finds the closest functions and files across the projects you index, on this Mac, in under a second,
@@ -15,8 +15,6 @@ and adds an Ask window for code:
    the answer as an interactive figure: a small machine whose working *is* the idea, each part tied to real code.
    The model only does the thinking (which machine, which parts, which steps); Gafitas ships the drawings, so a small
    local model can explain as clearly as a frontier one.
-3. **Map it.** Every stretch of code as a dot placed by meaning, colored by project, with your question among its
-   matches.
 
 ## Private, with one exception
 
@@ -36,7 +34,7 @@ scripts/test.sh           # swift test, also with only the Command Line Tools
 ```
 
 If DigUp is installed, Gafitas uses its model files instead of downloading another 865 MB copy; the indexes and
-settings stay separate. The search panel opens with ⇧⌥Space, so both apps can run side by side.
+settings stay separate. ⇧⌥Space opens the Ask window from any app, so both apps can run side by side.
 
 `digup`, the command-line tool from DigUp, indexes, searches and runs the evals from the terminal (`digup --help`);
 `evals/` holds the queries ranking changes are measured with.
@@ -45,7 +43,7 @@ settings stay separate. The search panel opens with ⇧⌥Space, so both apps ca
 
 Gafitas is built on [DigUp](https://github.com/ARahim3/DigUp) (MIT), [EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2)
 by Google DeepMind (Apache 2.0), [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT),
-[Sparkle](https://sparkle-project.org) (MIT), [OpenUI](https://github.com/thesysdev/openui) (MIT) and the
+[OpenUI](https://github.com/thesysdev/openui) (MIT) and the
 [anatomy](https://github.com/wheresryan22/anatomy) figure kit (MIT). Gafitas isn't affiliated with DigUp's author,
 Google or Apple.
 

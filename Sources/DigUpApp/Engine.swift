@@ -882,20 +882,6 @@ nonisolated final class Engine: @unchecked Sendable {
         }
     }
 
-    /// The code index's map (`Searcher.map`) with each file's path, for the Ask window; nil without code vectors.
-    func codeMap() async -> (map: CodeMap, paths: [Int64: String])? {
-        await withCheckedContinuation { continuation in
-            searchQueue.async { [self] in
-                let started = Date()
-                let roots = lock.withLock { codeRoots.map(\.path) }
-                guard let codeSearcher, let map = try? codeSearcher.map(),
-                      let files = try? codeStore?.files(under: roots) else { return continuation.resume(returning: nil) }
-                log("engine: code map of \(map.x.count) vectors in \(ms(since: started))")
-                continuation.resume(returning: (map, Dictionary(files.map { ($0.id, $0.path) }) { first, _ in first }))
-            }
-        }
-    }
-
     /// The text of the part of a file a hit points at (a document's passage, a page, a stretch of code), for the
     /// preview.
     func text(ofSegment id: Int64, code: Bool = false) async -> String? {

@@ -10,14 +10,6 @@ struct AnswerSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Picker("Show", selection: $ask.tab) {
-                    Text("Answer").tag(AskTab.answer)
-                    Text("Map").tag(AskTab.map)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .help("The answer (⌘1) or the map of your code (⌘2)")
                 if ask.answer == .working { ProgressView().controlSize(.small) }
                 if ask.answer != .idle {
                     Text(ask.progress)
@@ -32,14 +24,10 @@ struct AnswerSheet: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 40)
-            if ask.tab == .map {
-                CodeMapView(ask: ask)
-            } else {
-                switch ask.answer {
-                case .idle: before
-                case .needsPi: needsPi
-                case .working, .done, .failed: drawn
-                }
+            switch ask.answer {
+            case .idle: before
+            case .needsPi: needsPi
+            case .working, .done, .failed: drawn
             }
         }
     }

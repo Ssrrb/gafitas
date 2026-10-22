@@ -7,8 +7,7 @@
 #   RELEASE=1 SIGN_ID="Developer ID Application: …" ./build.sh   plus the secure timestamp notarization needs
 #                                    (scripts/release.sh does that, then notarizes and makes the DMG)
 # There's no install step: run it from build.noindex (see scripts/dev-run.sh).
-# For testing in-app updates with a copy of its own (never the installed Gafitas's settings or updates), these replace
-# Info.plist values: BUNDLE_ID, VERSION, BUILD_NUMBER, SPARKLE_FEED (the appcast URL), SPARKLE_KEY (the EdDSA public key).
+# For a copy with settings of its own, these replace Info.plist values: BUNDLE_ID, VERSION, BUILD_NUMBER.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -53,40 +52,16 @@ scripts/build-answer-ui.sh
 cp -R Resources/answer-ui Resources/pi "$APP/Contents/Resources/"
 cp Resources/AppIcon/tray.png Resources/AppIcon/tray-dim.png Resources/AppIcon/tray-paused.png "$APP/Contents/Resources/"   # the menubar's logo
 
-# Sparkle (in-app updates): the framework in Frameworks/, where the app's runpath looks. Its XPC services are for
-# sandboxed apps and its headers for building against it: left out.
-FW="$APP/Contents/Frameworks/Sparkle.framework"
-mkdir -p "$APP/Contents/Frameworks"
-ditto .build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework "$FW"
-for part in XPCServices Headers PrivateHeaders Modules; do rm -rf "${FW:?}/$part" "${FW:?}/Versions/B/$part"; done
-
 PLIST="$APP/Contents/Info.plist"
 [[ -n "${BUNDLE_ID:-}" ]] && /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$PLIST"
 [[ -n "${VERSION:-}" ]] && /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
 [[ -n "${BUILD_NUMBER:-}" ]] && /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST"
-[[ -n "${SPARKLE_FEED:-}" ]] && /usr/libexec/PlistBuddy -c "Set :SUFeedURL $SPARKLE_FEED" "$PLIST"
-[[ -n "${SPARKLE_KEY:-}" ]] && { /usr/libexec/PlistBuddy -c "Delete :SUPublicEDKey" "$PLIST" 2>/dev/null || true
-                                 /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $SPARKLE_KEY" "$PLIST"; }
 
-# Nested code first, then the bundle. The helper needs no entitlements: llama.cpp compiles its Metal shaders at run
-# time through Metal's own compiler service, which the hardened runtime allows (checked 2026-10-08). The app's one
-# entitlement lets it ask QuickTime Player to open a recording at a moment.
+# Nested code first, then the bundle. Neither needs entitlements: llama.cpp compiles its Metal shaders at run time
+# through Metal's own compiler service, which the hardened runtime allows (checked 2026-10-08).
 IDENTITY="${SIGN_ID:-$( [[ -f .sign-id ]] && head -1 .sign-id || echo - )}"
 TIMESTAMP=$([[ "${RELEASE:-}" == 1 ]] && echo --timestamp || echo --timestamp=none)
 codesign --force --sign "$IDENTITY" --options runtime $TIMESTAMP "$APP/Contents/Helpers/digup"
-# Sparkle comes ad-hoc signed: its helpers, then the framework, with this identity (the app may only load code signed
-# by its own team).
-for code in "$FW/Versions/B/Autoupdate" "$FW/Versions/B/Updater.app" "$FW"; do
-  codesign --force --sign "$IDENTITY" --options runtime $TIMESTAMP "$code"
-done
-# An ad-hoc build has no team, so the hardened runtime's library validation would refuse its (ad-hoc) Sparkle: such
-# builds (from source, without a signing identity) may load it anyway. Signed builds and releases keep validation.
-ENTITLEMENTS=Resources/DigUp.entitlements
-if [[ "$IDENTITY" == - ]]; then
-  ENTITLEMENTS="$(mktemp -d)/DigUp.entitlements"
-  cp Resources/DigUp.entitlements "$ENTITLEMENTS"
-  /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$ENTITLEMENTS"
-fi
-codesign --force --sign "$IDENTITY" --options runtime $TIMESTAMP --entitlements "$ENTITLEMENTS" "$APP"
+codesign --force --sign "$IDENTITY" --options runtime $TIMESTAMP "$APP"
 echo "Signed $([[ "$IDENTITY" == - ]] && echo ad-hoc || echo "with \"$IDENTITY\"") (hardened runtime)"
 echo "Built $APP"

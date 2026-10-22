@@ -18,7 +18,7 @@ enum Brand {
     /// The soft glow behind onboarding's steps.
     static let wash = LinearGradient(colors: [sprout, leaf], startPoint: .topLeading, endPoint: .bottomTrailing)
 
-    /// A code folder's tint in the Ask window (its chip, its places, its dots on the map): leaf, cobalt, rose, at least
+    /// A code folder's tint in the Ask window (its chip and its places): leaf, cobalt, rose, at least
     /// 60° of hue apart, a lighter one in dark mode. A fourth folder and on are gray.
     static func projectTint(_ index: Int) -> Color {
         let tints: [(light: UInt32, dark: UInt32)] = [(0x4F8058, 0xA2C78E), (0x2F6FB0, 0x6FA3E0), (0xB8336A, 0xE07AA6)]
@@ -55,7 +55,7 @@ struct Keycaps: View {
     }
 }
 
-/// "p. 3" or "0:06" on a result: the page or moment that matched.
+/// "L12–40" on a place: the lines that matched.
 struct PlaceBadge: View {
     let text: String
     var onImage = false
@@ -67,39 +67,6 @@ struct PlaceBadge: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Capsule().fill(onImage ? AnyShapeStyle(.black.opacity(0.6)) : AnyShapeStyle(.quaternary)))
-    }
-}
-
-/// Where a moment sits in a recording: a track with the matched stretch lit.
-struct MomentBar: View {
-    let start: Double
-    let end: Double
-    let duration: Double
-    /// Drawn over a picture: white on a dark track.
-    var onImage = false
-    /// Where playback is, while it plays.
-    var playhead: Double?
-
-    var body: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let from = max(0, min(1, start / duration)), to = max(from, min(1, end / duration))
-            ZStack(alignment: .leading) {
-                Capsule().fill(onImage ? Color.white.opacity(0.3) : Color.primary.opacity(0.12))
-                Capsule()
-                    .fill(onImage ? Color.white : Color.accentColor)
-                    .frame(width: max(4, width * (to - from)))
-                    .offset(x: width * from)
-                if let playhead {
-                    Circle()
-                        .fill(Color.primary)
-                        .frame(width: 9, height: 9)
-                        .offset(x: width * max(0, min(1, playhead / duration)) - 4.5)
-                }
-            }
-        }
-        .frame(height: 4)
-        .accessibilityLabel("At \(ResultRow.clock(start)) of \(ResultRow.clock(duration))")
     }
 }
 
@@ -164,34 +131,80 @@ func openFolderPrivacySettings() {
     }
 }
 
-/// Matched words, which FTS marks with « », in bold.
-func highlighted(_ text: String, size: CGFloat) -> AttributedString {
-    var result = AttributedString()
-    var bold = false
-    var piece = ""
-    func flush() {
-        guard !piece.isEmpty else { return }
-        var run = AttributedString(piece)
-        if bold {
-            run.font = .system(size: size, weight: .bold)
-            run.foregroundColor = .primary
-        }
-        result += run
-        piece = ""
+/// The Ask window's question and follow-up fields. AppKit, so the window can focus them directly; the arrows, ↩ and
+/// Esc never reach them, because its key monitor takes those first.
+struct SearchField: NSViewRepresentable {
+    /// The pause in typing after which the question is dug up again.
+    static let typingPause: Duration = .milliseconds(120)
+    @Binding var text: String
+    var fontSize: CGFloat = 22
+    let placeholder: String
+    var onMake: (NSTextField) -> Void = { _ in }
+    /// The field got the cursor (true) or lost it (false).
+    var onFocus: (Bool) -> Void = { _ in }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = FocusReportingField()
+        field.onFocus = onFocus
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: fontSize)
+        field.placeholderString = placeholder
+        field.usesSingleLineMode = true
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.delegate = context.coordinator
+        field.setAccessibilityLabel("Search")
+        onMake(field)
+        return field
     }
-    for character in text {
-        switch character {
-        case "«": flush(); bold = true
-        case "»": flush(); bold = false
-        default: piece.append(character)
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.text = $text
+        (field as? FocusReportingField)?.onFocus = onFocus
+        // While an input method composes (Korean, Japanese, Chinese), the field is ahead of `text` until the syllable
+        // is committed, and writing `text` back would cut the composition short ("사어ㅂ" typed for "사업").
+        if (field.currentEditor() as? NSTextView)?.hasMarkedText() != true, field.stringValue != text {
+            field.stringValue = text
+        }
+        if field.placeholderString != placeholder { field.placeholderString = placeholder }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text.wrappedValue = field.stringValue
         }
     }
-    flush()
-    return result
+}
+
+/// A text field that says when it gets the cursor and when it gives it up (its editing ends).
+final class FocusReportingField: NSTextField {
+    var onFocus: (Bool) -> Void = { _ in }
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocus(true) }
+        return became
+    }
+
+    override func textDidEndEditing(_ notification: Notification) {
+        super.textDidEndEditing(notification)
+        onFocus(false)
+    }
 }
 
 /// Click, then press the new shortcut; Esc cancels. While it listens, the global hotkey steps aside (`listening`) so
-/// that pressing the current one lands here instead of opening the panel.
+/// that pressing the current one lands here instead of opening the Ask window.
 struct ShortcutRecorder: View {
     let combo: KeyCombo?
     /// Tries a combination: nil when it's set, else why it can't be used.

@@ -101,18 +101,6 @@ nonisolated struct AppSettings: Sendable {
         return paths.filter { !$0.isEmpty }.map(folderURL).filter { seen.insert($0.path).inserted }
     }
 
-    static func save(roots: [URL]) {
-        defaults.set(roots.map(\.path), forKey: "roots")
-    }
-
-    static func save(excludedFolders: [URL]) {
-        defaults.set(excludedFolders.map(\.path), forKey: "excludedFolders")
-    }
-
-    static func save(excludedTypes: [String]) {
-        defaults.set(excludedTypes, forKey: "excludedTypes")
-    }
-
     static func save(hotkey: String) {
         defaults.set(hotkey, forKey: "hotkey")
     }

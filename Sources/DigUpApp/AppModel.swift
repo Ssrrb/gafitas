@@ -1,29 +1,26 @@
 import AppKit
 import Observation
 
-/// State the menubar, the panel and the windows share. Engine updates arrive on the main thread.
+/// State the menubar and the windows share. Engine updates arrive on the main thread.
 @Observable
 final class AppModel {
     var status = EngineStatus()
     var settings: AppSettings
     var hotkey: KeyCombo?
     let download: ModelDownload
-    /// A newer DigUp the daily check found ("0.6.1"), until you open it (`Updates`).
-    var updateAvailable: String?
 
     init(settings: AppSettings, download: ModelDownload) {
         self.settings = settings
         self.download = download
     }
 
-    var hasFolders: Bool { !settings.roots.isEmpty }
     /// Code search is on (there are code folders).
     var hasCode: Bool { !settings.codeRoots.isEmpty }
 
     /// One line for the menu and the windows: what the index is doing.
     var statusLine: String {
         let status = self.status
-        guard hasFolders else { return "No folders chosen yet" }
+        guard hasCode else { return "No folders chosen yet" }
         switch status.activity {
         case .starting: return "Starting…"
         case .failed(let problem): return "⚠︎ \(problem)"
@@ -37,6 +34,7 @@ final class AppModel {
             return "Reading the rest of \(which) · \(percent)%"
         case .idle:
             if let line = downloadLine { return line }
+            if settings.roots.isEmpty { return codeStatusLine }   // only code folders: what the main index says is 0
             if let code = status.code.indexing, code.total > 0 {
                 let percent = Int((Double(code.done) / Double(code.total) * 100).rounded(.down))
                 return "Indexing code \(percent)% · \(code.done.formatted()) of \(code.total.formatted())"
@@ -108,36 +106,5 @@ final class AppModel {
             return files + " waiting · read after your other files"
         }
         return "\(code.searchable.formatted()) code \(code.searchable == 1 ? "file" : "files") indexed" + waiting
-    }
-
-    /// A few words for the search bar while results may be incomplete: "Indexing 42%", "Downloading model · 42%".
-    var activityBadge: String? {
-        if download.isActive { return "Downloading model · \(Int(download.fraction * 100))%" }
-        if case .indexing(let done, let total) = status.activity, total > 0 {
-            return "Indexing \(Int(Double(done) / Double(total) * 100))%"
-        }
-        if status.paused, status.pending > 0 { return "Indexing paused" }
-        return nil
-    }
-
-    /// Why meaning search can't run yet (words still match), or nil.
-    var meaningUnavailable: String? {
-        guard !download.isReady else { return nil }
-        if download.isActive {
-            return "Matching words only until the model has downloaded (\(Int(download.fraction * 100))%)"
-        }
-        return "Matching words only: the model isn't downloaded"
-    }
-
-    /// Why results may be incomplete right now, or nil.
-    var resultsCaveat: String? {
-        if let meaningUnavailable { return meaningUnavailable }
-        if case .indexing(let done, let total) = status.activity, total > 0 {
-            return "Still indexing (\(Int(Double(done) / Double(total) * 100))%): some files aren't in yet"
-        }
-        if status.pending > 0 {
-            return "\(status.pending.formatted()) \(status.pending == 1 ? "file isn't" : "files aren't") indexed yet"
-        }
-        return nil
     }
 }

@@ -2,10 +2,10 @@ import AppKit
 import DigUpKit
 import ServiceManagement
 
-/// Owns the app's parts (engine, model download, hotkey, panel, windows, menu) and carries out what they ask for:
+/// Owns the app's parts (engine, model download, hotkey, windows, menu) and carries out what they ask for:
 /// new folders, a new hotkey, the login item, which window to show.
 final class AppController {
-    /// `-debugOffscreen YES`: windows and the panel are built and drawn but never shown, and the app never activates,
+    /// `-debugOffscreen YES`: windows are built and drawn but never shown, and the app never activates,
     /// so snapshot tests don't take the keyboard from whoever is using the Mac.
     static let offscreen = UserDefaults.standard.bool(forKey: "debugOffscreen")
 
@@ -13,17 +13,14 @@ final class AppController {
     let engine: Engine
     let download: ModelDownload
     let hotkeys = HotkeyCenter()
-    let updates: Updates
     private let power: PowerPolicy
     private let schedule: IndexSchedule
-    private(set) var panel: SearchPanelController!
-    private(set) var searchWindow: SearchWindowController!
     private(set) var askWindow: AskWindowController!
     private(set) var settingsWindow: SettingsWindowController!
     private(set) var statusMenu: StatusMenuController!
     private(set) var onboarding: OnboardingController?
     private var observers: [NSObjectProtocol] = []
-    /// Set while onboarding's shortcut step waits for you to try the hotkey: a press goes there, not to the panel.
+    /// Set while onboarding's shortcut step waits for you to try the hotkey: a press goes there, not to the Ask window.
     var hotkeyTester: (() -> Void)?
 
     init(settings: AppSettings) {
@@ -53,29 +50,20 @@ final class AppController {
         self.power = power
         self.schedule = schedule
         self.engine = engine
-        updates = Updates(model: model)
     }
 
-    /// `showWindow`: opened by hand (not at login), so the search window comes up once the app is set up.
+    /// `showWindow`: opened by hand (not at login), so the Ask window comes up once the app is set up.
     func start(showWindow: Bool = false) {
-        panel = SearchPanelController(app: self)
-        searchWindow = SearchWindowController(app: self)
         askWindow = AskWindowController(app: self)
         settingsWindow = SettingsWindowController(app: self)
         statusMenu = StatusMenuController(model: model)
-        statusMenu.onSearch = { [weak self] in self?.panel.show() }
-        statusMenu.onOpenWindow = { [weak self] in self?.showSearchWindow() }
         statusMenu.onAsk = { [weak self] in self?.showAsk() }
         statusMenu.onSettings = { [weak self] in self?.showSettings() }
-        statusMenu.onChooseFolders = { [weak self] in self?.chooseFolders() }
         statusMenu.onPauseChanged = { [weak self] paused in self?.engine.setPaused(paused) }
-        statusMenu.onCheckForUpdates = { [weak self] in self?.updates.checkNow() }
-        updates.onSessionEnded = { [weak self] in self?.windowClosed() }
-        updates.start()
 
         hotkeys.onPress = { [weak self] in
             guard let self else { return }
-            if let hotkeyTester { hotkeyTester() } else { panel.toggle() }
+            if let hotkeyTester { hotkeyTester() } else { showAsk() }
         }
         if let combo = KeyCombo(model.settings.hotkey) {
             model.hotkey = hotkeys.register(combo) ? combo : nil
@@ -89,12 +77,12 @@ final class AppController {
         download.onReady = { [weak self] in self?.engine.modelArrived() }
         engine.start()
         let settings = model.settings
-        if !settings.onboarded, settings.roots.isEmpty {
+        if !settings.onboarded, settings.codeRoots.isEmpty {
             showOnboarding()
         } else {
             // Set up already (the go-ahead came with onboarding), so a missing model just downloads.
             if !download.isReady { download.start() }
-            if showWindow { showSearchWindow() }
+            if showWindow { showAsk() }
         }
         for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
             observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil,
@@ -109,56 +97,12 @@ final class AppController {
     private func volumeChanged(_ volume: String?) {
         guard let volume else { return }
         let prefix = volume.hasSuffix("/") ? volume : volume + "/"
-        let affected = model.settings.roots.contains { $0.path == volume || $0.path.hasPrefix(prefix) }
-            || !model.status.missingRoots.isEmpty
+        let affected = (model.settings.roots + model.settings.codeRoots).contains {
+            $0.path == volume || $0.path.hasPrefix(prefix)
+        } || !model.status.missingRoots.isEmpty || !model.status.code.missingRoots.isEmpty
         guard affected else { return }
         log("volume: \(volume) came or went")
         engine.volumesChanged()
-    }
-
-    // MARK: Folders
-
-    /// The folders to index from now on, and those to skip in them (and the file types, when given); the engine
-    /// follows without a relaunch. A folder another chosen one already searches is dropped (its files would be found
-    /// twice), and so is a skip with nothing around it to skip from (`FolderSelection`).
-    func applyFolders(_ roots: [URL], excluded: [URL]? = nil, types: [String]? = nil) {
-        let selection = FolderSelection(chosen: roots.map { AppSettings.folderURL($0.path).path },
-                                        skipped: (excluded ?? model.settings.excludedFolders).map(\.path))
-        let roots = selection.folders.map(AppSettings.folderURL)
-        let excluded = selection.effectiveSkips.map(AppSettings.folderURL)
-        let types = types ?? model.settings.excludedTypes
-        if roots.count < selection.chosen.count {
-            log("folders: \(selection.chosen.count - roots.count) inside another chosen folder, already covered")
-        }
-        let settings = model.settings
-        guard roots != settings.roots || excluded != settings.excludedFolders || types != settings.excludedTypes
-        else { return }
-        AppSettings.save(roots: roots)
-        AppSettings.save(excludedFolders: excluded)
-        AppSettings.save(excludedTypes: types)
-        model.settings.roots = roots
-        model.settings.excludedFolders = excluded
-        model.settings.excludedTypes = types
-        engine.setFolders(roots: roots, excluded: excluded, excludedTypes: types)
-    }
-
-    func removeFolder(_ root: URL) {
-        applyFolders(model.settings.roots.filter { $0.path != root.path })
-    }
-
-    func setExcluded(_ folders: [URL]) {
-        AppSettings.save(excludedFolders: folders)
-        model.settings.excludedFolders = folders
-        engine.setFolders(roots: model.settings.roots, excluded: folders, excludedTypes: model.settings.excludedTypes)
-    }
-
-    /// File extensions never to index ("heic, .txt"); files of those types already indexed leave the index.
-    func setExcludedTypes(_ text: String) {
-        let types = IndexOptions.extensions(text).sorted()
-        guard types != model.settings.excludedTypes else { return }
-        AppSettings.save(excludedTypes: types)
-        model.settings.excludedTypes = types
-        engine.setFolders(roots: model.settings.roots, excluded: model.settings.excludedFolders, excludedTypes: types)
     }
 
     // MARK: Code search
@@ -212,18 +156,11 @@ final class AppController {
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
         panel.prompt = prompt
-        panel.message = "Choose folders for Gafitas to search."
+        panel.message = "Choose folders with code for Gafitas to read."
         let finish = { (response: NSApplication.ModalResponse) in
             done(response == .OK ? panel.urls.map { AppSettings.folderURL($0.path) } : [])
         }
         if let window { panel.beginSheetModal(for: window, completionHandler: finish) } else { finish(panel.runModal()) }
-    }
-
-    /// No folders yet: onboarding if it never ran, else Settings' folder list with Add Folders open.
-    func chooseFolders() {
-        guard model.settings.onboarded else { return showOnboarding() }
-        showSettings(.folders)
-        settingsWindow.addFolders()
     }
 
     /// Settings → Code with its folders' sheet open.
@@ -272,10 +209,6 @@ final class AppController {
 
     // MARK: Windows
 
-    func showSearchWindow(query: String? = nil, kind: ResultGroupKind? = nil) {
-        searchWindow.show(query: query, kind: kind)
-    }
-
     func showAsk(question: String? = nil) {
         askWindow.show(question: question)
     }
@@ -290,10 +223,10 @@ final class AppController {
         onboarding.show()
     }
 
-    /// Onboarding closed: by Done, or by its close button. Folders chosen by then count as set up.
+    /// Onboarding closed: by Done, or by its close button. Code folders chosen by then count as set up.
     func onboardingClosed() {
         hotkeyTester = nil
-        if model.hasFolders {
+        if model.hasCode {
             AppSettings.saveOnboarded()
             model.settings.onboarded = true
         }
@@ -312,13 +245,8 @@ final class AppController {
     /// A window closed: the Dock icon goes once none is left.
     func windowClosed() {
         DispatchQueue.main.async { [self] in
-            let open = [searchWindow?.isVisible, askWindow?.isVisible, settingsWindow?.isVisible, onboarding?.isVisible]
-                .contains { $0 == true }
-            if !open {
-                NSApp.setActivationPolicy(.accessory)
-                Thumbnails.shared.clear()
-                Previews.shared.clear()
-            }
+            let open = [askWindow?.isVisible, settingsWindow?.isVisible, onboarding?.isVisible].contains { $0 == true }
+            if !open { NSApp.setActivationPolicy(.accessory) }
         }
     }
 }

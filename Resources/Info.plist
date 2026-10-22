@@ -30,8 +30,6 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Gafitas asks QuickTime Player to open a recording at the moment that matched your search.</string>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>Gafitas reads the folders you choose so you can ask about what's inside. Everything stays on this Mac.</string>
 	<key>NSDocumentsFolderUsageDescription</key>

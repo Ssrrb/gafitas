@@ -4,12 +4,11 @@ import Observation
 import SwiftUI
 
 enum SettingsTab: String, CaseIterable {
-    case general, folders, code, storage
+    case general, code, storage
 
     var title: String {
         switch self {
         case .general: "General"
-        case .folders: "Folders"
         case .code: "Code"
         case .storage: "Storage"
         }
@@ -18,19 +17,16 @@ enum SettingsTab: String, CaseIterable {
     var symbol: String {
         switch self {
         case .general: "gearshape"
-        case .folders: "folder"
         case .code: "chevron.left.forwardslash.chevron.right"
         case .storage: "internaldrive"
         }
     }
 }
 
-/// Settings, the way Mac apps lay them out: a toolbar of tabs, and the window sized to each one. Folders is also where
+/// Settings, the way Mac apps lay them out: a toolbar of tabs, and the window sized to each one. Code is also where
 /// the index shows how far along it is, folder by folder.
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     let state: SettingsState
-    /// Folders → Add Folders…, a sheet on this window.
-    let addSheet: AddFoldersController
     /// Code → Add Folders… (code search's folders), a sheet on this window.
     let codeSheet: AddFoldersController
     private unowned let app: AppController
@@ -40,22 +36,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     init(app: AppController) {
         self.app = app
         state = SettingsState(app: app)
-        addSheet = AddFoldersController(app: app)
-        codeSheet = AddFoldersController(app: app, code: true)
+        codeSheet = AddFoldersController(app: app)
         super.init()
-        state.addFolders = { [weak self] in self?.addFolders() }
         state.addCodeFolders = { [weak self] in self?.addCodeFolders() }
-        for sheet in [addSheet, codeSheet] {
-            sheet.onAdded = { [weak self] in
-                guard let self else { return }
-                Task { await self.state.refresh() }
-            }
+        codeSheet.onAdded = { [weak self] in
+            guard let self else { return }
+            Task { await self.state.refresh() }
         }
-    }
-
-    /// Opens Add Folders on the Folders tab.
-    func addFolders() {
-        addSheet.begin(on: window)
     }
 
     /// Opens the code folders' sheet on the Code tab.
@@ -104,7 +91,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        addSheet.end()
         codeSheet.end()
         window?.contentViewController = nil
         window = nil
@@ -120,16 +106,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 @Observable
 final class SettingsState {
     var tab = SettingsTab.general
-    private(set) var summaries: [Engine.RootSummary]?
     private(set) var codeSummaries: [Engine.RootSummary] = []
     private(set) var indexSize: Int64 = 0
     private(set) var codeIndexSize: Int64 = 0
     var launchAtLogin = false
     var loginProblem: String?
-    var checksForUpdates = false
     @ObservationIgnored let app: AppController
     @ObservationIgnored var selectTab: (SettingsTab) -> Void = { _ in }
-    @ObservationIgnored var addFolders: () -> Void = {}
     @ObservationIgnored var addCodeFolders: () -> Void = {}
 
     init(app: AppController) {
@@ -144,11 +127,10 @@ final class SettingsState {
     func refresh() async {
         lastRefresh = Date()
         launchAtLogin = app.launchesAtLogin
-        checksForUpdates = app.updates.automaticallyChecks
         indexSize = app.engine.indexSize
         codeIndexSize = app.engine.codeIndexSize
         codeSummaries = await app.engine.rootSummaries(code: true)
-        summaries = await app.engine.rootSummaries()
+        isLoaded = true
     }
 
     /// The index changed: refresh the folder counts, at most every 2 s while files are being indexed.
@@ -164,7 +146,7 @@ final class SettingsState {
     }
 
     /// Ready to be drawn (debug snapshots wait for this).
-    var isLoaded: Bool { summaries != nil }
+    private(set) var isLoaded = false
 }
 
 /// One tab's content, at the width every tab shares.
@@ -180,7 +162,6 @@ private struct SettingsPane: View {
             Group {
                 switch tab {
                 case .general: GeneralSettings(state: state)
-                case .folders: FolderSettings(state: state)
                 case .code: CodeSettings(state: state)
                 case .storage: StorageSettings(state: state)
                 }
@@ -210,8 +191,8 @@ private struct GeneralSettings: View {
                                      listening: { state.app.hotkeyRecording($0) }, capSize: 13)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Search shortcut")
-                        Text("Opens the search panel from any app.")
+                        Text("Ask shortcut")
+                        Text("Opens the Ask window from any app.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
@@ -230,234 +211,9 @@ private struct GeneralSettings: View {
                     }
                 }
             }
-            if Updates.enabled { Section {
-                Toggle(isOn: Binding(get: { state.checksForUpdates }, set: { on in
-                    state.app.updates.automaticallyChecks = on
-                    state.checksForUpdates = on
-                })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Check for updates automatically")
-                        Text("Once a day Gafitas asks GitHub for its newest version; nothing about your files is sent. "
-                             + "Updates install with one click.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                LabeledContent {
-                    Button("Check Now") { state.app.updates.checkNow() }
-                } label: {
-                    Text(state.model.updateAvailable.map { "Gafitas \($0) is available" }
-                         ?? "Gafitas \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
-                }
-            } }
         }
         .formStyle(.grouped)
         .scrollDisabled(true)
-    }
-}
-
-private struct FolderSettings: View {
-    @Bindable var state: SettingsState
-    @State private var removing: Engine.RootSummary?
-
-    var body: some View {
-        Form {
-            Section {
-                IndexProgress(model: state.model) { state.app.engine.setPaused(!state.model.status.paused) }
-            }
-            Section {
-                if let summaries = state.summaries {
-                    if summaries.isEmpty {
-                        Text("No folders yet. Add the ones Gafitas should search.")
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(summaries) { summary in
-                        FolderStatusRow(summary: summary) { removing = summary }
-                    }
-                } else {
-                    ProgressView().controlSize(.small).frame(maxWidth: .infinity)
-                }
-            } header: {
-                Text("Folders to search")
-            } footer: {
-                HStack {
-                    Button(action: state.addFolders) {
-                        Label("Add Folders…", systemImage: "plus")
-                    }
-                    Spacer()
-                }
-            }
-            Section {
-                ForEach(state.model.settings.excludedFolders, id: \.path) { folder in
-                    HStack {
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: folder.path))
-                            .resizable()
-                            .frame(width: 18, height: 18)
-                        Text(tildePath(folder.path)).lineLimit(1).truncationMode(.middle)
-                        Spacer()
-                        Button {
-                            state.app.setExcluded(state.model.settings.excludedFolders.filter { $0 != folder })
-                        } label: {
-                            Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Search this folder again")
-                    }
-                }
-                if state.model.settings.excludedFolders.isEmpty {
-                    Text("None. Code projects, app bundles and caches are skipped anyway (code has its own tab).")
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Skip these folders")
-            } footer: {
-                HStack {
-                    Button {
-                        state.app.pickFolders(for: NSApp.keyWindow, prompt: "Skip") { folders in
-                            guard !folders.isEmpty else { return }
-                            state.app.setExcluded(state.model.settings.excludedFolders
-                                + folders.filter { !state.model.settings.excludedFolders.contains($0) })
-                        }
-                    } label: {
-                        Label("Skip a Folder…", systemImage: "plus")
-                    }
-                    Spacer()
-                }
-            }
-            Section {
-                TypeExclusions(types: state.model.settings.excludedTypes) { state.app.setExcludedTypes($0) }
-            } header: {
-                Text("Skip these file types")
-            } footer: {
-                Text("Gafitas only reads pictures, PDFs, documents (txt, md, typ, rtf, docx, odt, html), audio and video here; "
-                     + "code is read only in the code folders (the Code tab). Keys, certificates and password files are "
-                     + "never read, nor are hidden folders like ~/.ssh.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Section {
-                Toggle(isOn: Binding(get: { state.model.settings.indexOnBattery },
-                                     set: { state.app.setIndexOnBattery($0) })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(AppSettings.batteryTitle)
-                        Text(AppSettings.batteryDetail)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Toggle(isOn: Binding(get: { state.model.settings.indexHoursOn }, set: { on in
-                    state.app.setIndexHours(on: on, hours: state.model.settings.indexHours)
-                })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Index only at set hours")
-                        Text("Files are read only between these times, and what changed meanwhile is picked up when "
-                             + "they begin. Search works all day.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                if state.model.settings.indexHoursOn {
-                    LabeledContent("From") {
-                        HStack(spacing: 6) {
-                            DatePicker("From", selection: time(\.start), displayedComponents: .hourAndMinute)
-                                .labelsHidden()
-                            Text("to")
-                            DatePicker("To", selection: time(\.end), displayedComponents: .hourAndMinute)
-                                .labelsHidden()
-                        }
-                    }
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .scrollDisabled(true)
-        .onChange(of: state.model.status) { state.statusChanged() }
-        .confirmationDialog(removalTitle, isPresented: Binding(get: { removing != nil },
-                                                               set: { if !$0 { removing = nil } })) {
-            Button("Remove", role: .destructive) {
-                guard let removing else { return }
-                state.app.removeFolder(URL(fileURLWithPath: removing.path))
-                Task { await state.refresh() }
-            }
-        } message: {
-            Text("Its \(removing?.files.formatted() ?? "") files leave the index. Adding it back later indexes them "
-                 + "again.")
-        }
-    }
-
-    private var removalTitle: String {
-        "Stop searching “\(removing.map { ($0.path as NSString).lastPathComponent } ?? "")”?"
-    }
-
-    /// One end of the set hours, as a time of day for a date picker.
-    private func time(_ end: KeyPath<IndexHours, Int>) -> Binding<Date> {
-        Binding(get: {
-            let minute = state.model.settings.indexHours[keyPath: end]
-            return Calendar.current.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: Date()) ?? Date()
-        }, set: { date in
-            let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-            let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-            let hours = state.model.settings.indexHours
-            state.app.setIndexHours(on: true, hours: end == \IndexHours.start ? IndexHours(start: minute, end: hours.end)
-                                                                              : IndexHours(start: hours.start, end: minute))
-        })
-    }
-}
-
-/// Extensions typed as "heic, txt": applied on Return or when the field loses focus.
-private struct TypeExclusions: View {
-    let types: [String]
-    let apply: (String) -> Void
-    @State private var text = ""
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        TextField("Extensions", text: $text, prompt: Text("e.g. heic, txt"))
-            .labelsHidden()
-            .focused($focused)
-            .onSubmit { apply(text) }
-            .onChange(of: focused) { _, now in if !now { apply(text) } }
-            .onAppear { text = types.joined(separator: ", ") }
-            .onChange(of: types) { _, now in text = now.joined(separator: ", ") }
-    }
-}
-
-/// What the index is doing, with Pause/Resume.
-private struct IndexProgress: View {
-    let model: AppModel
-    let togglePause: () -> Void
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(model.statusLine).font(.system(size: 13, weight: .semibold))
-                if let progress = model.progress {
-                    ProgressView(value: progress).controlSize(.small)
-                }
-                Text(detail)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if model.hasFolders {
-                Button(model.status.paused ? "Resume" : "Pause", action: togglePause)
-            }
-        }
-    }
-
-    /// "357 of 365 files searchable · 8 waiting · 2 long files to finish"
-    private var detail: String {
-        let status = model.status
-        var text = "\(status.searchable.formatted()) of \(status.files.formatted()) files searchable"
-        if status.pending > 0 { text += " · \(status.pending.formatted()) waiting" }
-        if status.unfinished > 0 {
-            text += " · \(status.unfinished.formatted()) long \(status.unfinished == 1 ? "file" : "files") to finish"
-        }
-        if model.download.isActive { text += " · model \(model.download.progressText)" }
-        return text
     }
 }
 
@@ -625,8 +381,8 @@ private struct StorageSettings: View {
             }
             Section("Privacy") {
                 Text("Gafitas reads the folders you choose and keeps what it learns in its index, on this Mac. "
-                     + "It goes online only to download its model, once, and to check for updates (General), "
-                     + "which sends nothing about your files.")
+                     + "It downloads its model once; questions in the Ask window go to the model Pi answers with "
+                     + "(Code → Answers).")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -642,7 +398,8 @@ private struct StorageSettings: View {
     }
 }
 
-/// Code search: its folders and how far along their index is, the editor results open in, and turning it off.
+/// Code search: its folders and how far along their index is, when it indexes, the editor places open in, and
+/// turning it off.
 private struct CodeSettings: View {
     @Bindable var state: SettingsState
     @State private var turningOff = false
@@ -652,10 +409,9 @@ private struct CodeSettings: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Search your code").font(.system(size: 13, weight: .semibold))
-                    Text("Find code by what it does, or by a name in it: type code: in the search panel, as in "
-                         + "“code: retry with backoff”. Code has an index of its own, and it never shows up in "
-                         + "other searches.")
+                    Text("Your code").font(.system(size: 13, weight: .semibold))
+                    Text("Gafitas reads the code in these folders, on this Mac, so the Ask window can find the places "
+                         + "that answer your question.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -672,6 +428,9 @@ private struct CodeSettings: View {
                         Text(bytes(state.codeIndexSize))
                             .font(.system(size: 11).monospacedDigit())
                             .foregroundStyle(.secondary)
+                        Button(state.model.status.paused ? "Resume" : "Pause") {
+                            state.app.engine.setPaused(!state.model.status.paused)
+                        }
                     }
                 }
             }
@@ -735,21 +494,54 @@ private struct CodeSettings: View {
                 }
             }
             Section {
+                Toggle(isOn: Binding(get: { state.model.settings.indexOnBattery },
+                                     set: { state.app.setIndexOnBattery($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppSettings.batteryTitle)
+                        Text(AppSettings.batteryDetail)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Toggle(isOn: Binding(get: { state.model.settings.indexHoursOn }, set: { on in
+                    state.app.setIndexHours(on: on, hours: state.model.settings.indexHours)
+                })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Index only at set hours")
+                        Text("Files are read only between these times, and what changed meanwhile is picked up when "
+                             + "they begin. Search works all day.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if state.model.settings.indexHoursOn {
+                    LabeledContent("From") {
+                        HStack(spacing: 6) {
+                            DatePicker("From", selection: time(\.start), displayedComponents: .hourAndMinute)
+                                .labelsHidden()
+                            Text("to")
+                            DatePicker("To", selection: time(\.end), displayedComponents: .hourAndMinute)
+                                .labelsHidden()
+                        }
+                    }
+                }
+            }
+            Section {
                 Picker("Open code in", selection: Binding(get: { CodeEditor.chosen(state.model.settings.codeEditor).id },
                                                           set: { state.app.setCodeEditor($0) })) {
                     ForEach(CodeEditor.installed) { editor in Text(editor.name).tag(editor.id) }
                     Text(CodeEditor.defaultApp.name).tag(CodeEditor.defaultApp.id)
                 }
             } footer: {
-                Text("A result opens there at the line that matched. Space shows the whole file in Quick Look.")
+                Text("A place opens there at the line that matched.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
-            AnswerSettings(state: state)
+            AnswerSettings()
             Section {
-                Text("The code index keeps your code's text on this Mac, as the main index keeps your documents'. "
-                     + "It skips what git ignores, vendored and generated code, data files, and anything that looks "
-                     + "like a key or a password.")
+                Text("The code index keeps your code's text on this Mac. It skips what git ignores, vendored and "
+                     + "generated code, data files, and anything that looks like a key or a password.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -783,15 +575,25 @@ private struct CodeSettings: View {
             Text("Its \(removing?.files.formatted() ?? "") code files leave the code index.")
         }
     }
+
+    /// One end of the set hours, as a time of day for a date picker.
+    private func time(_ end: KeyPath<IndexHours, Int>) -> Binding<Date> {
+        Binding(get: {
+            let minute = state.model.settings.indexHours[keyPath: end]
+            return Calendar.current.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: Date()) ?? Date()
+        }, set: { date in
+            let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+            let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+            let hours = state.model.settings.indexHours
+            state.app.setIndexHours(on: true, hours: end == \IndexHours.start ? IndexHours(start: minute, end: hours.end)
+                                                                              : IndexHours(start: hours.start, end: minute))
+        })
+    }
 }
 
-/// Answers in the Ask window: who writes them (Pi, with its model), what goes to that model, and Pi in the terminal.
+/// Answers in the Ask window: who writes them (Pi, with its model), and what goes to that model.
 private struct AnswerSettings: View {
-    let state: SettingsState
     @State private var pi = AgentRunner.locate()
-    @State private var installed = FileManager.default.fileExists(atPath: AnswerSettings.terminalExtension.path)
-
-    static let terminalExtension = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/extensions/gafitas.ts")
 
     var body: some View {
         Section {
@@ -805,16 +607,6 @@ private struct AnswerSettings: View {
                     }
                 }
             }
-            if pi != nil {
-                Toggle(isOn: Binding(get: { installed }, set: { setTerminal($0) })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Look for existing code from Pi in the terminal")
-                        Text("Adds dig to Pi everywhere, and Pi writes no file before it has looked.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
         } header: {
             Text("Answers")
         } footer: {
@@ -825,25 +617,6 @@ private struct AnswerSettings: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    /// The extension for Pi everywhere, pointed at this copy of Gafitas's helper and index.
-    private func setTerminal(_ on: Bool) {
-        let file = Self.terminalExtension
-        if on {
-            guard let source = Bundle.main.url(forResource: "gafitas", withExtension: "ts", subdirectory: "pi"),
-                  var text = try? String(contentsOf: source, encoding: .utf8) else { return }
-            let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/digup").path
-            text = text.replacingOccurrences(of: "\"/Applications/Gafitas.app/Contents/Helpers/digup\"",
-                                             with: "\"\(helper)\"")
-                .replacingOccurrences(of: "`${support}/index.noindex`",
-                                      with: "\"\(state.model.settings.indexDirectory.path)\"")
-            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? text.write(to: file, atomically: true, encoding: .utf8)
-        } else {
-            try? FileManager.default.removeItem(at: file)
-        }
-        installed = FileManager.default.fileExists(atPath: file.path)
     }
 }
 

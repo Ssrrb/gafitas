@@ -1,0 +1,167 @@
+{
+ "base": "~/DigUpTestbed/code",
+ "queries": [
+  {
+   "q": "code: I need to add retries with backoff to our payment calls",
+   "expect": [
+    "billing-service/billing/retry.py@8-29"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: build a circuit breaker so we stop hammering the bank's API while it's down",
+   "expect": [
+    "billing-service/billing/retry.py@36-63"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: add a way for support to refund an order",
+   "expect": [
+    "billing-service/billing/gateway.py@47-51"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: we should verify Stripe webhook signatures before trusting the event",
+   "expect": [
+    "billing-service/billing/webhooks.py@11-20"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: format prices for the checkout page",
+   "expect": [
+    "billing-service/billing/money.py@5-12"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: let friends split a restaurant bill evenly",
+   "expect": [
+    "billing-service/billing/money.py@15-17"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: show 'posted 5 minutes ago' under each comment",
+   "expect": [
+    "todo-web/src/utils/relativeTime.ts"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: protect the login endpoint from brute force by throttling each client",
+   "expect": [
+    "todo-web/src/server/rateLimit.ts"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: let users set an avatar image on their profile",
+   "expect": [
+    "todo-web/src/server/upload.ts"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: a search-as-you-type box that doesn't send a request on every keystroke",
+   "expect": [
+    "todo-web/src/hooks/useDebounce.ts"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: keep people signed in by renewing their session token quietly",
+   "expect": [
+    "todo-web/src/api/auth.ts@21-34",
+    "todo-web/src/api/auth.ts@37-47"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: I want to clean up near-identical pictures in my library",
+   "expect": [
+    "photo-organizer/Sources/PhotoOrganizer/DuplicateFinder.swift"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: generate thumbnails for a gallery grid",
+   "expect": [
+    "photo-organizer/Sources/PhotoOrganizer/Thumbnailer.swift@10-21"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: import new images automatically as soon as they land in a folder",
+   "expect": [
+    "photo-organizer/Sources/PhotoOrganizer/FolderWatcher.swift"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: add a warmup to the learning rate schedule of the new model",
+   "expect": [
+    "ml-experiments/train.py@9-13"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: make a stratified train/test split for the new dataset",
+   "expect": [
+    "ml-experiments/data/clean.py@19-20"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: report precision and recall per class after training",
+   "expect": [
+    "ml-experiments/eval/metrics.py@13-20"
+   ],
+   "tag": "new-work"
+  },
+  {
+   "q": "code: reject uploads that are already in the photo library, using the duplicate finder",
+   "expect": [
+    "photo-organizer/Sources/PhotoOrganizer/DuplicateFinder.swift"
+   ],
+   "tag": "two-projects"
+  },
+  {
+   "q": "code: reject uploads that are already in the photo library, using the duplicate finder",
+   "expect": [
+    "todo-web/src/server/upload.ts"
+   ],
+   "tag": "two-projects"
+  },
+  {
+   "q": "code: reuse the billing retry with backoff in the todo app's fetch hook",
+   "expect": [
+    "billing-service/billing/retry.py@8-29"
+   ],
+   "tag": "two-projects"
+  },
+  {
+   "q": "code: reuse the billing retry with backoff in the todo app's fetch hook",
+   "expect": [
+    "todo-web/src/hooks/useFetch.ts"
+   ],
+   "tag": "two-projects"
+  },
+  {
+   "q": "code: rate limit the billing webhooks the way the todo server limits requests",
+   "expect": [
+    "todo-web/src/server/rateLimit.ts"
+   ],
+   "tag": "two-projects"
+  },
+  {
+   "q": "code: rate limit the billing webhooks the way the todo server limits requests",
+   "expect": [
+    "billing-service/billing/webhooks.py@11-20"
+   ],
+   "tag": "two-projects"
+  }
+ ]
+}

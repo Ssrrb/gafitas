@@ -4,8 +4,8 @@ import Observation
 import SwiftUI
 
 /// First launch, in four steps: what Gafitas does, which folders hold your code (with how long reading them takes),
-/// the hotkey (try it), and done. The model downloads from Get Started on, shown at the bottom of every later step, and
-/// the chosen folders start indexing as soon as you continue past them.
+/// the hotkey (try it), and done. The search model downloads from Empezar on, shown at the bottom of every later step,
+/// and the chosen folders start being read as soon as you continue past them.
 final class OnboardingController: NSObject, NSWindowDelegate {
     let state: OnboardingState
     private unowned let app: AppController
@@ -34,7 +34,7 @@ final class OnboardingController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.title = "Welcome to Gafitas"
+        window.title = "Gafitas"
         window.isReleasedWhenClosed = false
         window.delegate = self
         state.close = { [weak self] in self?.close() }
@@ -105,6 +105,7 @@ final class OnboardingState {
             go(to: .ready)
         case .ready:
             finish()
+            app.showAsk()
         }
     }
 
@@ -145,6 +146,13 @@ final class OnboardingState {
             self?.codeFolders.add(picked)
         }
     }
+
+    func skipCodeFolders(from window: NSWindow?) {
+        app.pickFolders(for: window, prompt: "Omitir") { [weak self] picked in
+            guard !picked.isEmpty else { return }
+            self?.codeFolders.skip(picked)
+        }
+    }
 }
 
 // MARK: Views
@@ -170,30 +178,25 @@ struct OnboardingView: View {
             footer
         }
         .frame(width: Self.size.width, height: Self.size.height)
-        .background(alignment: .top) {
-            // A soft moss glow behind the top of each step, from the icon's colors.
-            Brand.wash
-                .frame(height: 260)
-                .mask(LinearGradient(colors: [.black.opacity(0.10), .clear], startPoint: .top, endPoint: .bottom))
-                .ignoresSafeArea()
-        }
+        .background(Brand.sheet)
     }
 
     private var footer: some View {
         HStack(spacing: 14) {
             StepDots(current: state.steps.firstIndex(of: state.step) ?? 0, count: state.steps.count)
-            if state.step != .welcome {
+            // Before Empezar there's nothing to say about the download unless it's under way or done.
+            if state.step != .welcome || state.download.phase != .needed {
                 DownloadStatus(download: state.download)
             }
             Spacer(minLength: 8)
             if state.step == .code {
                 Text(codeSummary)
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
                     .lineLimit(1)
             }
             if state.step != .welcome, state.step != .ready {
-                Button("Back") { state.back() }
+                Button("Atrás") { state.back() }
             }
             Button(continueTitle) { state.next() }
                 .keyboardShortcut(.defaultAction)
@@ -206,18 +209,18 @@ struct OnboardingView: View {
 
     private var continueTitle: String {
         switch state.step {
-        case .welcome: "Get Started"
-        case .code: "Start Indexing"
-        case .shortcut: "Continue"
-        case .ready: "Done"
+        case .welcome: "Empezar"
+        case .code: "Empezar a leer"
+        case .shortcut: "Continuar"
+        case .ready: "Hacer una pregunta"
         }
     }
 
     private var codeSummary: String {
-        guard !state.codeFolders.roots.isEmpty else { return "Check the folders with your code" }
-        guard state.codeFolders.estimatesDone else { return "Looking at your code…" }
+        guard !state.codeFolders.roots.isEmpty else { return "Marca las carpetas de tu código" }
+        guard state.codeFolders.estimatesDone else { return "Mirando tu código…" }
         let seconds = state.codeFolders.totalSeconds
-        return (seconds < 1 ? "Under a second" : "About \(roughDuration(seconds))")
+        return (seconds < 1 ? "Menos de un segundo" : "Unos \(roughDuration(seconds))")
             + ", \(roughBytes(state.codeFolders.totalBytes))"
     }
 }
@@ -235,11 +238,12 @@ private struct StepDots: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Step \(current + 1) of \(count)")
+        .accessibilityLabel("Paso \(current + 1) de \(count)")
     }
 }
 
-/// The model download, small: "Downloading the model · 42% · about 1 min left", then "Model ready".
+/// The search model's download, small: "Descargando el modelo de búsqueda · 42 % · quedan unos 3 min", then
+/// "Modelo de búsqueda listo".
 struct DownloadStatus: View {
     let download: ModelDownload
 
@@ -247,29 +251,34 @@ struct DownloadStatus: View {
         HStack(spacing: 7) {
             switch download.phase {
             case .ready:
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text("Model ready")
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.lit)
+                Text("Modelo de búsqueda listo")
             case .failed(let message):
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Brand.negative)
                 Text(message).lineLimit(1)
-                Button("Try Again") { download.start() }.controlSize(.small)
-                Button("Use Files…") { download.chooseFiles(for: NSApp.keyWindow) }
+                Button("Reintentar") { download.start() }.controlSize(.small)
+                Button("Usar archivos…") { download.chooseFiles(for: NSApp.keyWindow) }
                     .controlSize(.small)
-                    .help("Downloaded the model's two files somewhere else? Choose them here.")
+                    .help("¿Descargaste los dos archivos del modelo en otro sitio? Elígelos aquí.")
             case .needed:
-                Image(systemName: "arrow.down.circle").foregroundStyle(.secondary)
-                Text("Model not downloaded")
-                Button("Download") { download.start() }.controlSize(.small)
+                Image(systemName: "arrow.down.circle")
+                Text("Modelo de búsqueda sin descargar")
+                Button("Descargar") { download.start() }.controlSize(.small)
             default:
                 ProgressView(value: download.fraction)
                     .progressViewStyle(.circular)
                     .controlSize(.small)
-                Text("Downloading the model · \(download.progressText)")
-                    .lineLimit(1)
+                // Short of room (onboarding's code step), the time left goes first.
+                ViewThatFits(in: .horizontal) {
+                    Text("Descargando el modelo de búsqueda · \(download.progressText)")
+                    Text("Modelo de búsqueda: \(download.progressText)")
+                    Text("Modelo de búsqueda: \(Int(download.fraction * 100).formatted(.percent.locale(When.locale)))")
+                }
+                .lineLimit(1)
             }
         }
         .font(.system(size: 12))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Brand.muted)
     }
 }
 
@@ -279,38 +288,50 @@ private struct WelcomeStep: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
-                .shadow(color: Brand.moss.opacity(0.35), radius: 14, y: 6)
             Text("Gafitas")
                 .font(.system(size: 30, weight: .bold))
                 .padding(.top, 10)
-            Text("Describe it. Dig it up.")
-                .font(.system(size: 16))
-                .foregroundStyle(.secondary)
-                .padding(.top, 2)
-            Text("Ask how your code works. Gafitas finds the places in your projects that answer it, on this Mac, "
-                 + "and draws how they fit together.")
-                .font(.system(size: 14))
+            Text("Pregunta cómo funciona tu código y mira cómo encajan las piezas.")
+                .font(.system(size: 15))
+                .foregroundStyle(Brand.muted)
                 .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 470)
-                .padding(.top, 30)
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "lock.shield")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 30)
-                Text("Your code is indexed and searched on this Mac. Gafitas downloads its AI model (865 MB) once. "
-                     + "Next, Gafitas looks for folders with code to say how long each would take; nothing is indexed "
-                     + "until you choose.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 16) {
+                row("text.magnifyingglass", "Busca en tus proyectos",
+                    "Lee las carpetas de código que elijas y encuentra lo que responde, en este Mac.")
+                row("point.3.connected.trianglepath.dotted", "Pi dibuja la respuesta",
+                    "Explica y dibuja cómo se conectan las piezas, con las líneas reales.")
+                row("clock.arrow.circlepath", "Todo queda guardado",
+                    "Vuelve a cualquier pregunta sin esperar, o sigue preguntando.")
             }
-            .padding(.top, 26)
-            .frame(maxWidth: 470, alignment: .leading)
+            .frame(maxWidth: 440, alignment: .leading)
+            .padding(.top, 30)
+            Text("Gafitas descarga una vez su modelo de búsqueda (865 MB). Si el modelo de Pi no está en este Mac, "
+                 + "te pregunta antes de enviar nada.")
+                .font(.system(size: 11))
+                .foregroundStyle(Brand.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 440, alignment: .leading)
+                .padding(.top, 26)
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 40)
+    }
+
+    private func row(_ symbol: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 16))
+                .foregroundStyle(Brand.muted)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Brand.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
@@ -323,7 +344,7 @@ struct StepTitle: View {
             Text(title).font(.system(size: 24, weight: .bold))
             Text(subtitle)
                 .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Brand.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -337,22 +358,27 @@ private struct CodeStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            StepTitle(title: "Where's your code?",
-                      subtitle: "Pick the folders that hold your projects; open one to pick among its repos. Gafitas "
-                          + "reads them on this Mac. You can change this anytime in Settings → Code.")
+            StepTitle(title: "¿Qué proyectos debería leer Gafitas?",
+                      subtitle: "Elige las carpetas donde guardas tu código: un repositorio o una carpeta con varios.")
             ScrollView {
                 VStack(spacing: 6) {
-                    FolderList(choices: state.codeFolders, addTitle: "Add Folder…") {
+                    FolderList(choices: state.codeFolders, addTitle: "Añadir carpetas…") {
                         state.addCodeFolders(from: NSApp.keyWindow)
                     }
-                    CodeFolderNote().padding(.top, 4)
+                    Button("Omitir algunas carpetas") { state.skipCodeFolders(from: NSApp.keyWindow) }
+                        .buttonStyle(.link)
+                        .font(.system(size: 12))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 4)
+                    CodeFolderNote().padding(.top, 2)
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
             HStack {
-                Text("Open code in")
-                Picker("Open code in", selection: Binding(get: { CodeEditor.chosen(state.model.settings.codeEditor).id },
-                                                          set: { state.app.setCodeEditor($0) })) {
+                Text("Abrir el código en")
+                Picker("Abrir el código en", selection: Binding(get: { CodeEditor.chosen(state.model.settings.codeEditor).id },
+                                                                set: { state.app.setCodeEditor($0) })) {
                     ForEach(CodeEditor.installed) { editor in Text(editor.name).tag(editor.id) }
                     Text(CodeEditor.defaultApp.name).tag(CodeEditor.defaultApp.id)
                 }
@@ -371,18 +397,21 @@ private struct ShortcutStep: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            StepTitle(title: "Open Gafitas from anywhere",
-                      subtitle: "Press the shortcut in any app, ask about your code, and press Return.")
+            StepTitle(title: "Pregunta desde cualquier app",
+                      subtitle: "Pulsa el atajo, escribe tu pregunta y pulsa ↩.")
             ShortcutRecorder(combo: state.model.hotkey, apply: { state.app.setHotkey($0) },
                              listening: { state.app.hotkeyRecording($0) }, capSize: 20)
                 .padding(.top, 34)
             Group {
                 if state.hotkeyWorked {
-                    Label("That's it. It works from any app.", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    Label {
+                        Text("Funciona.")
+                    } icon: {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.lit)
+                    }
                 } else if let hotkey = state.model.hotkey {
-                    Text("Try it now: press \(hotkey.display).")
-                        .foregroundStyle(.secondary)
+                    Text("Pruébalo ahora: pulsa \(hotkey.display).")
+                        .foregroundStyle(Brand.muted)
                 }
             }
             .font(.system(size: 13, weight: .medium))
@@ -394,53 +423,50 @@ private struct ShortcutStep: View {
 
 private struct ReadyStep: View {
     @Bindable var state: OnboardingState
+    @State private var pi = AgentRunner.locate()
 
     var body: some View {
         VStack(spacing: 0) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(Brand.gradient)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(Brand.lit)
                 .padding(.top, 8)
-            Text("You're all set")
+            Text("Todo listo.")
                 .font(.system(size: 26, weight: .bold))
                 .padding(.top, 14)
-            Text(progressNote)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 470)
-                .padding(.top, 8)
             VStack(alignment: .leading, spacing: 16) {
-                SwitchRow(title: "Open Gafitas when you log in", detail: "So the shortcut always works.",
+                SwitchRow(title: "Abrir Gafitas al iniciar sesión", detail: "Así el atajo siempre funciona.",
                           isOn: $state.launchAtLogin)
                 Divider()
                 SwitchRow(title: AppSettings.batteryTitle, detail: AppSettings.batteryDetail,
                           isOn: $state.indexOnBattery)
+                Divider()
+                HStack(spacing: 16) {
+                    Text(pi.map { "Pi, en \(tildePath($0.path))" } ?? "Pi no está instalado")
+                        .font(.system(size: 13, weight: .medium))
+                    Spacer(minLength: 0)
+                    if pi == nil {
+                        Button("Copiar comando") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(NeedsPi.installCommand, forType: .string)
+                        }
+                        .help(NeedsPi.installCommand)
+                    }
+                }
             }
             .padding(20)
             .frame(maxWidth: 470, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.04)))
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Brand.fill))
             .padding(.top, 28)
             HStack(spacing: 8) {
-                Image(systemName: "sparkle.magnifyingglass")
-                Text("Gafitas lives in the menu bar, which shows how indexing is going.")
+                Image(systemName: "menubar.rectangle")
+                Text("Gafitas vive en la barra de menús, que muestra cómo va la lectura.")
             }
             .font(.system(size: 12))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Brand.muted)
             .padding(.top, 22)
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private var progressNote: String {
-        let seconds = state.codeFolders.totalSeconds
-        let time = seconds > 0 ? " (about \(roughDuration(seconds)) on this Mac)" : ""
-        if state.download.isReady {
-            return "Gafitas is reading your code\(time). You can ask right away; places fill in as it goes."
-        }
-        return "Gafitas starts reading your code\(time) once the model has downloaded "
-            + "(\(state.download.progressText)). Until then, answers come from the model alone."
     }
 }
 
@@ -456,7 +482,7 @@ struct SwitchRow: View {
                 Text(title).font(.system(size: 13, weight: .medium))
                 Text(detail)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)

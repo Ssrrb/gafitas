@@ -45,7 +45,7 @@ final class AddFoldersController {
                                   add: { [weak self] in self?.add() })
         let sheet = NSWindow(contentViewController: NSHostingController(rootView: view))
         sheet.styleMask = [.titled]
-        sheet.title = "Code Folders"
+        sheet.title = "Proyectos"
         self.sheet = sheet
         choices.startEstimates()
         log("add folders: \(choices.rows.count) to choose from")
@@ -91,11 +91,11 @@ private struct AddFoldersView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
-                StepTitle(title: "Search your code",
-                          subtitle: "Pick the folders that hold your projects; open one to pick among its repos. "
-                              + "Gafitas reads each once, then what changes.")
+                StepTitle(title: "Añadir proyectos",
+                          subtitle: "Elige las carpetas donde guardas tu código: un repositorio o una carpeta con "
+                              + "varios. Gafitas lee tu código una vez y luego solo lo que cambie.")
                 ScrollView {
-                    FolderList(choices: choices, addTitle: "Choose Another Folder…", add: pick)
+                    FolderList(choices: choices, addTitle: "Elegir otra carpeta…", add: pick)
                     CodeFolderNote().padding(.top, 8)
                 }
                 .scrollBounceBehavior(.basedOnSize)
@@ -107,12 +107,12 @@ private struct AddFoldersView: View {
             HStack(spacing: 12) {
                 Text(summary)
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Button("Cancel", action: cancel)
+                Button("Cancelar", action: cancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Add", action: add)
+                Button("Añadir", action: add)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!choices.changesSomething)
             }
@@ -124,10 +124,10 @@ private struct AddFoldersView: View {
     }
 
     private var summary: String {
-        guard choices.changesSomething else { return "Check the folders to add" }
-        guard choices.estimatesDone else { return "Looking at the folders…" }
-        let time = choices.totalSeconds < 1 ? "under a second" : "about \(roughDuration(choices.totalSeconds))"
-        return "Adds \(time) of indexing and \(roughBytes(choices.totalBytes))"
+        guard choices.changesSomething else { return "Marca las carpetas que quieras añadir" }
+        guard choices.estimatesDone else { return "Mirando las carpetas…" }
+        let time = choices.totalSeconds < 1 ? "menos de un segundo" : "unos \(roughDuration(choices.totalSeconds))"
+        return "Añade \(time) de lectura y \(roughBytes(choices.totalBytes))"
     }
 }
 
@@ -135,14 +135,13 @@ private struct AddFoldersView: View {
 struct CodeFolderNote: View {
     var body: some View {
         Label {
-            Text("Code search reads source files, notebooks and a repo's own docs. It skips what git ignores, vendored "
-                 + "and generated code, data files, and anything that looks like a key or a password.")
+            Text("Lo que git ignora, el código de terceros y el generado se omiten siempre; las claves nunca se leen.")
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: "info.circle")
         }
         .font(.system(size: 11))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Brand.muted)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
     }

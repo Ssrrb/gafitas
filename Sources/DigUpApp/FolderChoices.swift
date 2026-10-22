@@ -89,8 +89,8 @@ final class FolderChoices {
                 expanded.insert(row.path)
             } else if selection.isSearched(path) {
                 let by = selection.searchedAs(path)
-                note = "“\(folder.lastPathComponent)” is searched already"
-                    + (by == nil || by == path ? "." : ", as part of “\((by! as NSString).lastPathComponent)”.")
+                note = "«\(folder.lastPathComponent)» ya se lee"
+                    + (by == nil || by == path ? "." : ", como parte de «\((by! as NSString).lastPathComponent)».")
             } else {
                 rows.append(folder)
                 selection.setFolder(path, on: true)
@@ -116,7 +116,7 @@ final class FolderChoices {
                 selection.setSubfolder(path, on: false)
                 deeper.append(path)
             } else {
-                note = "“\(folder.lastPathComponent)” isn't searched anyway."
+                note = "«\(folder.lastPathComponent)» no se lee de todos modos."
             }
         }
         estimate(rows.filter { row in deeper.contains { FolderSelection.isInside($0, row.path) } })
@@ -244,7 +244,7 @@ struct FolderList: View {
             Button(action: add) {
                 Label(addTitle, systemImage: "plus")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
                     .frame(maxWidth: .infinity, minHeight: 42)
                     .contentShape(Rectangle())
                     .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -254,7 +254,7 @@ struct FolderList: View {
             if let note = choices.note {
                 Label(note, systemImage: "info.circle")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
             }
@@ -267,10 +267,10 @@ private struct FolderRow: View {
     let row: URL
     @State private var showAll = false
 
-    static let laterHelp = "The first pass takes this long. Long PDFs and documents get their first pages in it, "
-        + "and the rest afterwards, once everything else is in."
-    static let codeHelp = "How long reading this code takes, once, and about how much room its index needs. After "
-        + "that, only what changes is read again."
+    static let laterHelp = "Lo que tarda la primera lectura. De los PDF y documentos largos se leen primero las "
+        + "primeras páginas, y el resto después, cuando ya esté todo lo demás."
+    static let codeHelp = "Lo que tarda leer este código, una vez, y más o menos cuánto ocupa su índice. Después solo "
+        + "se vuelve a leer lo que cambie."
 
     /// Subfolders shown before "Show N more".
     private static let shortList = 8
@@ -289,7 +289,7 @@ private struct FolderRow: View {
                         SubfolderRow(choices: choices, subfolder: subfolder)
                     }
                     if !showAll, subfolders.count > Self.shortList {
-                        Button("Show \(subfolders.count - Self.shortList) more") { showAll = true }
+                        Button("Mostrar \(subfolders.count - Self.shortList) más") { showAll = true }
                             .buttonStyle(.link)
                             .font(.system(size: 11))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -318,7 +318,7 @@ private struct FolderRow: View {
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
                     .rotationEffect(.degrees(open ? 90 : 0))
                     .frame(width: 14, height: 30)
                     .contentShape(Rectangle())
@@ -326,9 +326,9 @@ private struct FolderRow: View {
             .buttonStyle(.plain)
             .opacity(canOpen ? 1 : 0)
             .disabled(!canOpen)
-            .help(open ? "Hide its subfolders" : "Choose among its subfolders")
-            .accessibilityLabel(open ? "Hide the subfolders of \(row.lastPathComponent)"
-                                : "Show the subfolders of \(row.lastPathComponent)")
+            .help(open ? "Ocultar sus subcarpetas" : "Elegir entre sus subcarpetas")
+            .accessibilityLabel(open ? "Ocultar las subcarpetas de \(row.lastPathComponent)"
+                                : "Mostrar las subcarpetas de \(row.lastPathComponent)")
             Checkbox(mark: mark, label: row.lastPathComponent) { choices.toggle(row) }
             Image(nsImage: NSWorkspace.shared.icon(forFile: row.path))
                 .resizable()
@@ -336,15 +336,15 @@ private struct FolderRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.lastPathComponent).font(.system(size: 13, weight: .semibold))
                 if let estimate, estimate.failed {
-                    Text("Couldn't look inside it; it can still be searched.")
+                    Text("No se pudo mirar dentro; aun así se puede leer.")
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Brand.muted)
                 } else if let estimate, !estimate.readable {
                     HStack(spacing: 6) {
-                        Text("macOS isn't letting Gafitas read it.")
+                        Text("macOS no deja que Gafitas la lea.")
                             .font(.system(size: 11))
                             .foregroundStyle(.orange)
-                        Button("Allow in Settings…", action: openFolderPrivacySettings)
+                        Button("Permitir en Ajustes del Sistema…", action: openFolderPrivacySettings)
                             .buttonStyle(.link)
                             .font(.system(size: 11))
                     }
@@ -352,10 +352,10 @@ private struct FolderRow: View {
                     KindCounts(counts: part.files)
                 } else {
                     Text(estimate == nil ? tildePath(row.path)
-                         : estimate!.files.isEmpty ? (choices.code ? "No code here" : "Nothing to search here yet")
-                         : "Nothing to search in the subfolders checked")
+                         : estimate!.files.isEmpty ? (choices.code ? "Aquí no hay código" : "Todavía no hay nada que leer aquí")
+                         : "No hay nada que leer en las subcarpetas marcadas")
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Brand.muted)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -371,7 +371,7 @@ private struct FolderRow: View {
                             .font(.system(size: 10).monospacedDigit())
                             .foregroundStyle(.tertiary)
                     } else if let later = part?.later, later >= 30 {
-                        Text("+ \(roughDuration(later)) later")
+                        Text("+ \(roughDuration(later)) después")
                             .font(.system(size: 10).monospacedDigit())
                             .foregroundStyle(.tertiary)
                     }
@@ -413,9 +413,9 @@ private struct SubfolderRow: View {
             Spacer(minLength: 8)
             Text(approximately(subfolder.seconds)
                  + (choices.code ? " · \(roughBytes(subfolder.bytes))"
-                    : subfolder.laterSeconds >= 30 ? " + \(roughDuration(subfolder.laterSeconds)) later" : ""))
+                    : subfolder.laterSeconds >= 30 ? " + \(roughDuration(subfolder.laterSeconds)) después" : ""))
                 .font(.system(size: 11, weight: .medium).monospacedDigit())
-                .foregroundStyle(on ? .secondary : .tertiary)
+                .foregroundStyle(on ? AnyShapeStyle(Brand.muted) : AnyShapeStyle(.tertiary))
                 .help(choices.code ? FolderRow.codeHelp : FolderRow.laterHelp)
         }
         .padding(.leading, 56)

@@ -14,7 +14,7 @@ import SwiftUI
 ///     -debugPauseAfter S / -debugResumeAfter S   press Pause / Resume S seconds after launch
 ///     -debugCodeFolders a:b|off -debugCodeFoldersAfter S   choose these code folders S seconds after launch (as
 ///                             Settings would; "off" turns code search off)
-///     -debugIcon <png>        draw the menubar icon idle, at 0%, 42% and 90%, and paused
+///     -debugIcon <png>        draw the menubar icon idle, at 0%, 42% and 90%, and paused (at 4×, 2× and 1×)
 ///     -debugHotkeyCheck a,b   log what the shortcut recorder would say about each combination ("cmd+space"…)
 ///     -debugMenuView <png>    draw the top of the menu (status, detail, progress) into <png>, after
 ///                             -debugMenuViewAfter seconds
@@ -120,10 +120,10 @@ enum DebugHooks {
             let menu = app.statusMenu!
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 log("menu: \(menu.describeMenu())")
-                menu.performItem(titled: "Pause Indexing")
+                menu.performItem(titled: "Pausar la lectura")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     log("menu after Pause: \(menu.describeMenu())")
-                    menu.performItem(titled: "Resume Indexing")
+                    menu.performItem(titled: "Reanudar la lectura")
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         log("menu after Resume: \(menu.describeMenu())")
                     }
@@ -394,21 +394,25 @@ enum DebugHooks {
         save("menu header", { try Snapshot.write(window, to: $0, cornerRadius: 6) }, to: url)
     }
 
-    /// The menubar icon idle, at a few progress values and paused, scaled up, black on white
-    /// (as a template it takes the bar's color).
+    /// The menubar icon idle, at a few progress values and paused, black on white (as a template it takes the bar's
+    /// color): scaled up 4×, and under it at the bar's own 2× and 1× pixels.
     private static func drawIcons(to url: URL) {
         let states: [(Double?, Bool)] = [(nil, false), (0.0, false), (0.42, false), (0.9, false), (nil, true)]
         let scale: CGFloat = 4, side: CGFloat = 18
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(side * scale) * states.count,
-                                   pixelsHigh: Int(side * scale), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
-                                   isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+                                   pixelsHigh: Int(side * (scale + 3)), bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+                                   bitsPerPixel: 0)!
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         NSColor.white.setFill()
         NSRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh).fill()
         for (index, (progress, paused)) in states.enumerated() {
-            StatusIcon.image(progress: progress, paused: paused)
-                .draw(in: NSRect(x: CGFloat(index) * side * scale, y: 0, width: side * scale, height: side * scale))
+            let image = StatusIcon.image(progress: progress, paused: paused)
+            let x = CGFloat(index) * side * scale
+            image.draw(in: NSRect(x: x, y: side * 3, width: side * scale, height: side * scale))
+            image.draw(in: NSRect(x: x, y: side, width: side * 2, height: side * 2))
+            image.draw(in: NSRect(x: x + side * 2, y: 0, width: side, height: side))
         }
         NSGraphicsContext.restoreGraphicsState()
         try? rep.representation(using: .png, properties: [:])?.write(to: url)

@@ -9,8 +9,8 @@ enum SettingsTab: String, CaseIterable {
     var title: String {
         switch self {
         case .general: "General"
-        case .code: "Code"
-        case .storage: "Storage"
+        case .code: "Código"
+        case .storage: "Almacenamiento"
         }
     }
 
@@ -27,7 +27,7 @@ enum SettingsTab: String, CaseIterable {
 /// the index shows how far along it is, folder by folder.
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     let state: SettingsState
-    /// Code → Add Folders… (code search's folders), a sheet on this window.
+    /// Código → Añadir carpetas… (code search's folders), a sheet on this window.
     let codeSheet: AddFoldersController
     private unowned let app: AppController
     private var window: NSWindow?
@@ -99,6 +99,18 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func snapshot(to url: URL) throws {
+        // On macOS 26 the selected tab sits on glass, which `cacheDisplay` draws as a blank white square (the window on
+        // screen is fine): the picture leaves the glass out, so the tab shows as the window server would draw it, minus
+        // its highlight.
+        var hidden: [NSView] = []
+        if #available(macOS 26, *), let frame = window?.contentView?.superview {
+            func glass(in view: NSView) -> [NSView] {
+                (view is NSGlassEffectView ? view.subviews : []) + view.subviews.flatMap { glass(in: $0) }
+            }
+            hidden = glass(in: frame).filter { !$0.isHidden }
+            hidden.forEach { $0.isHidden = true }
+        }
+        defer { hidden.forEach { $0.isHidden = false } }
         try Snapshot.write(window, to: url)
     }
 }
@@ -109,6 +121,7 @@ final class SettingsState {
     private(set) var codeSummaries: [Engine.RootSummary] = []
     private(set) var indexSize: Int64 = 0
     private(set) var codeIndexSize: Int64 = 0
+    private(set) var history = (chats: 0, bytes: Int64(0))
     var launchAtLogin = false
     var loginProblem: String?
     @ObservationIgnored let app: AppController
@@ -129,6 +142,7 @@ final class SettingsState {
         launchAtLogin = app.launchesAtLogin
         indexSize = app.engine.indexSize
         codeIndexSize = app.engine.codeIndexSize
+        history = app.chatLog.usage()
         codeSummaries = await app.engine.rootSummaries(code: true)
         isLoaded = true
     }
@@ -147,6 +161,23 @@ final class SettingsState {
 
     /// Ready to be drawn (debug snapshots wait for this).
     private(set) var isLoaded = false
+
+    /// Almacenamiento → Borrar el historial…: asks first, then deletes every saved chat.
+    func deleteHistory() {
+        let alert = NSAlert()
+        alert.messageText = "¿Borrar todo el historial?"
+        alert.informativeText = "Se borran de este Mac todas tus conversaciones. No se puede deshacer."
+        alert.addButton(withTitle: "Borrar").hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancelar").keyEquivalent = "\u{1b}"
+        let done = { [self] (response: NSApplication.ModalResponse) in
+            guard response == .alertFirstButtonReturn else { return }
+            app.chatLog.deleteAll()
+            log("history: deleted (\(history.chats) chats)")
+            app.askWindow.ask.refreshHistory()
+            history = app.chatLog.usage()
+        }
+        if let window = NSApp.keyWindow { alert.beginSheetModal(for: window, completionHandler: done) } else { done(alert.runModal()) }
+    }
 }
 
 /// One tab's content, at the width every tab shares.
@@ -154,7 +185,7 @@ private struct SettingsPane: View {
     let tab: SettingsTab
     let state: SettingsState
     /// The content's own height. The window is that tall up to what the screen has room for, and scrolls past it (a
-    /// long list of folders ran it off the screen, Add Folders… with it).
+    /// long list of folders ran it off the screen, Añadir carpetas… with it).
     @State private var height: CGFloat?
 
     var body: some View {
@@ -191,10 +222,10 @@ private struct GeneralSettings: View {
                                      listening: { state.app.hotkeyRecording($0) }, capSize: 13)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Ask shortcut")
-                        Text("Opens the Ask window from any app.")
+                        Text("Atajo para preguntar")
+                        Text("Abre la ventana de preguntas desde cualquier app.")
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Brand.muted)
                     }
                 }
             }
@@ -204,10 +235,10 @@ private struct GeneralSettings: View {
                     state.launchAtLogin = state.app.launchesAtLogin
                 })) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Open Gafitas when you log in")
-                        Text(state.loginProblem ?? "So the shortcut always works.")
+                        Text("Abrir Gafitas al iniciar sesión")
+                        Text(state.loginProblem ?? "Así el atajo siempre funciona.")
                             .font(.system(size: 11))
-                            .foregroundStyle(state.loginProblem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                            .foregroundStyle(state.loginProblem == nil ? Brand.muted : Brand.negative)
                     }
                 }
             }
@@ -232,21 +263,21 @@ private struct FolderStatusRow: View {
                 HStack(spacing: 6) {
                     Text((summary.path as NSString).lastPathComponent).font(.system(size: 13, weight: .semibold))
                     if summary.missing || summary.unreadable {
-                        Text(summary.missing ? "Not connected" : "No access")
+                        Text(summary.missing ? "Sin conectar" : "Sin acceso")
                             .font(.system(size: 10, weight: .semibold))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.orange.opacity(0.2)))
                     }
                     if summary.unreadable {
-                        Button("Allow in Settings…", action: openFolderPrivacySettings)
+                        Button("Permitir en Ajustes del Sistema…", action: openFolderPrivacySettings)
                             .buttonStyle(.link)
                             .font(.system(size: 11))
                     }
                 }
                 Text(tildePath(summary.path))
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if !summary.kinds.isEmpty {
@@ -254,74 +285,93 @@ private struct FolderStatusRow: View {
                 }
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(summary.missing || summary.unreadable ? "Kept for when it's back"
-                     : "\(summary.indexed.formatted()) of \(summary.files.formatted()) indexed")
-                    .font(.system(size: 12, weight: .medium).monospacedDigit())
-                if !states.isEmpty {
-                    if reasons.isEmpty {
-                        Text(states).font(.system(size: 11)).foregroundStyle(.secondary)
-                    } else {
-                        Button { showingReasons.toggle() } label: {
-                            HStack(spacing: 3) {
-                                Text(states)
-                                Image(systemName: "info.circle")
-                            }
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Why some files aren't searchable")
-                        .popover(isPresented: $showingReasons, arrowEdge: .bottom) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(reasons, id: \.self) { Text($0) }
-                            }
-                            .font(.system(size: 12))
-                            .padding(12)
-                            .frame(maxWidth: 360, alignment: .leading)
-                        }
+            if reasons.isEmpty {
+                counts
+            } else {
+                Button { showingReasons.toggle() } label: {
+                    HStack(spacing: 3) {
+                        counts
+                        Image(systemName: "info.circle").font(.system(size: 11)).foregroundStyle(Brand.muted)
                     }
+                }
+                .buttonStyle(.plain)
+                .help("Por qué algunos archivos no se leen")
+                .popover(isPresented: $showingReasons, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(reasons, id: \.self) { Text($0) }
+                    }
+                    .font(.system(size: 12))
+                    .padding(12)
+                    .frame(maxWidth: 360, alignment: .leading)
                 }
             }
             Button(action: remove) {
-                Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                Image(systemName: "minus.circle.fill").foregroundStyle(Brand.muted)
             }
             .buttonStyle(.plain)
-            .help("Stop searching this folder")
-            .accessibilityLabel("Remove \((summary.path as NSString).lastPathComponent)")
+            .help("Dejar de leer este proyecto")
+            .accessibilityLabel("Quitar \((summary.path as NSString).lastPathComponent)")
         }
         .padding(.vertical, 2)
     }
 
+    /// "11 de 12 leídos · 1 omitido", on one line.
+    private var counts: some View {
+        HStack(spacing: 4) {
+            Text(summary.missing || summary.unreadable ? "Se guarda para cuando vuelva"
+                 : "\(number(summary.indexed)) de \(number(summary.files)) leídos")
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+            if !states.isEmpty {
+                Text("· " + states).font(.system(size: 12).monospacedDigit()).foregroundStyle(Brand.muted)
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+    }
+
+    private func number(_ count: Int) -> String { count.formatted(.number.locale(When.locale)) }
+
     private var states: String {
-        [summary.pending > 0 ? "\(summary.pending.formatted()) waiting" : nil,
+        [summary.pending > 0 ? "\(number(summary.pending)) por leer" : nil,
          summary.unfinished > 0
-            ? "\(summary.unfinished.formatted()) long \(summary.unfinished == 1 ? "file" : "files") to finish" : nil,
-         summary.skipped > 0 ? "\(summary.skipped.formatted()) skipped" : nil,
-         summary.failed > 0 ? "\(summary.failed.formatted()) couldn't be read" : nil,
-         summary.leftOutCount > 0 ? "\(summary.leftOutCount.formatted()) not read" : nil].compactMap { $0 }
+            ? "\(number(summary.unfinished)) \(summary.unfinished == 1 ? "largo" : "largos") por terminar" : nil,
+         summary.skipped > 0 ? "\(number(summary.skipped)) \(summary.skipped == 1 ? "omitido" : "omitidos")" : nil,
+         summary.failed > 0
+            ? "\(number(summary.failed)) \(summary.failed == 1 ? "no se pudo leer" : "no se pudieron leer")" : nil,
+         summary.leftOutCount > 0 ? "\(number(summary.leftOutCount)) sin leer" : nil].compactMap { $0 }
             .joined(separator: " · ")
     }
 
-    /// One line per reason: what the crawl never queued from this folder, then what was skipped once read.
+    /// One line per reason: what the crawl never queued from this folder, then what was skipped once read. The
+    /// reasons come from the index in English (DigUpKit's words): these say them in Spanish.
     private var reasons: [String] {
         let crawl: [String: String] = [
-            "other type": "of types Gafitas doesn't read",
-            "app or bundle": "inside apps or bundles",
-            "Photos library": "in a Photos library (its photos aren't read yet)",
-            "link or special file": "links or special files",
-            "in the cloud, not downloaded": "only in the cloud, not downloaded",
-            "inside a code project": "inside code projects, where only screenshots count",
-            "dataset": "in folders that look like datasets",
-            "code or data file": "code or data files",
-            "excluded type": "of the file types you skip",
+            "other type": "de tipos que Gafitas no lee",
+            "app or bundle": "dentro de apps o paquetes",
+            "link or special file": "enlaces o archivos especiales",
+            "in the cloud, not downloaded": "solo en la nube, sin descargar",
+            "ignored by git": "que git ignora",
+            "too big to be written by hand": "demasiado grandes para estar escritos a mano",
+            "data file": "archivos de datos",
+            "minified": "minificados",
+            "license": "licencias",
+            "key or password file": "archivos de claves o contraseñas",
+            "excluded type": "de los tipos que omites",
         ]
+        let folders: [String: String] = [
+            "vendored or built code": "con código de terceros o generado",
+            "submodule or worktree": "submódulos o worktrees",
+            "excluded folder": "que omites",
+        ]
+        let skipped: [String: String] = ["no code": "sin código", "no text": "sin texto", "not read": "sin leer"]
         let leftOut = summary.leftOut.sorted { $0.value > $1.value }.map { reason, count in
-            reason.hasPrefix("folders ") ? "\(count.formatted()) \(reason) weren't opened"
-                : "\(count.formatted()) \(crawl[reason] ?? reason)"
+            reason.hasPrefix("folders ")
+                ? "\(number(count)) \(count == 1 ? "carpeta" : "carpetas") \(folders[String(reason.dropFirst(8))] ?? String(reason.dropFirst(8))) sin abrir"
+                : "\(number(count)) \(crawl[reason] ?? reason)"
         }
-        let skipped = summary.skippedReasons.sorted { $0.value > $1.value }.map { "\($1.formatted()) skipped: \($0)" }
-        return leftOut + skipped
+        return leftOut + summary.skippedReasons.sorted { $0.value > $1.value }.map {
+            "\(number($1)) \($1 == 1 ? "omitido" : "omitidos"): \(skipped[$0] ?? $0)"
+        }
     }
 }
 
@@ -334,63 +384,71 @@ private struct StorageSettings: View {
                 LabeledContent("EmbeddingGemma 2") {
                     Text("Google · Apache 2.0 · 865 MB")
                 }
-                LabeledContent("Status") {
+                LabeledContent("Estado") {
                     HStack(spacing: 8) {
-                        Text(state.model.download.isReady ? "Downloaded" : state.model.download.progressText)
+                        Text(state.model.download.isReady ? "Descargado" : state.model.download.progressText)
                         switch state.model.download.phase {
                         case .needed, .failed:
-                            Button("Download") { state.model.download.start() }.controlSize(.small)
-                            Button("Use Files…") { state.model.download.chooseFiles(for: NSApp.keyWindow) }
+                            Button("Descargar") { state.model.download.start() }.controlSize(.small)
+                            Button("Usar archivos…") { state.model.download.chooseFiles(for: NSApp.keyWindow) }
                                 .controlSize(.small)
                         default:
                             EmptyView()
                         }
                     }
                 }
-                LabeledContent("Location") {
+                LabeledContent("Ubicación") {
                     PathButton(url: state.model.settings.modelsDirectory)
                 }
             } header: {
-                Text("Model")
+                Text("Modelo de búsqueda")
             } footer: {
                 if !state.model.download.isReady {
                     HStack(alignment: .firstTextBaseline) {
-                        Text("If your network blocks Hugging Face, download the two files on another network and "
-                             + "click Use Files… to choose them. Gafitas checks them before it uses them.")
+                        Text("Si tu red bloquea Hugging Face, descarga los dos archivos en otra red y pulsa Usar "
+                             + "archivos… para elegirlos. Gafitas los comprueba antes de usarlos.")
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Brand.muted)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer()
-                        Button("Copy Links") {
+                        Button("Copiar enlaces") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(ModelDownload.links, forType: .string)
                         }
                         .controlSize(.small)
-                        .help("Copies the addresses of the two files")
+                        .help("Copia las direcciones de los dos archivos")
                     }
                 }
             }
-            Section("Index") {
-                LabeledContent("Size on disk", value: bytes(state.indexSize))
-                if state.model.hasCode {
-                    LabeledContent("Code index", value: bytes(state.codeIndexSize))
-                }
-                LabeledContent("Location") {
+            Section("Índice") {
+                LabeledContent("Tamaño en disco", value: bytes(state.indexSize + state.codeIndexSize))
+                LabeledContent("Ubicación") {
                     PathButton(url: state.model.settings.indexDirectory)
                 }
             }
-            Section("Privacy") {
-                Text("Gafitas reads the folders you choose and keeps what it learns in its index, on this Mac. "
-                     + "It downloads its model once; questions in the Ask window go to the model Pi answers with "
-                     + "(Code → Answers).")
-                    .foregroundStyle(.secondary)
+            Section("Historial") {
+                LabeledContent {
+                    Button("Borrar el historial…", action: state.deleteHistory)
+                        .disabled(state.history.chats == 0)
+                } label: {
+                    Text(state.history.chats == 0 ? "Todavía no hay conversaciones"
+                         : "\(state.history.chats.formatted(.number.locale(When.locale))) "
+                           + "\(state.history.chats == 1 ? "conversación" : "conversaciones") · \(bytes(state.history.bytes))")
+                }
+            }
+            Section("Privacidad") {
+                Text("Gafitas lee los proyectos que eliges y guarda su índice en este Mac, y descarga una vez su modelo "
+                     + "de búsqueda. Para responder, tu pregunta, los lugares que encontró y lo que Pi lea de tus "
+                     + "proyectos van al modelo con el que responde Pi (Código → Respuestas). El historial de "
+                     + "preguntas también se queda en este Mac.")
+                    .foregroundStyle(Brand.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Section {
                 Text("Gafitas \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · "
-                     + "EmbeddingGemma 2 by Google (Apache 2.0), run by llama.cpp (MIT).")
+                     + "EmbeddingGemma 2 de Google (Apache 2.0), con llama.cpp (MIT).")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
             }
         }
         .formStyle(.grouped)
@@ -398,37 +456,26 @@ private struct StorageSettings: View {
     }
 }
 
-/// Code search: its folders and how far along their index is, when it indexes, the editor places open in, and
-/// turning it off.
+/// Code search: its projects and how far along their index is, when it reads, the editor places open in, and who
+/// writes the answers.
 private struct CodeSettings: View {
     @Bindable var state: SettingsState
-    @State private var turningOff = false
     @State private var removing: Engine.RootSummary?
 
     var body: some View {
         Form {
-            Section {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Your code").font(.system(size: 13, weight: .semibold))
-                    Text("Gafitas reads the code in these folders, on this Mac, so the Ask window can find the places "
-                         + "that answer your question.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if state.model.hasCode {
+            if state.model.hasCode {
+                Section {
                     HStack {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(state.model.codeStatusLine).font(.system(size: 12, weight: .medium))
+                            Text(state.model.codeStatusLine + " · " + bytes(state.codeIndexSize))
+                                .font(.system(size: 12, weight: .medium))
                             if let indexing = state.model.status.code.indexing, indexing.total > 0 {
                                 ProgressView(value: Double(indexing.done) / Double(indexing.total)).controlSize(.small)
                             }
                         }
                         Spacer()
-                        Text(bytes(state.codeIndexSize))
-                            .font(.system(size: 11).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        Button(state.model.status.paused ? "Resume" : "Pause") {
+                        Button(state.model.status.paused ? "Reanudar la lectura" : "Pausar la lectura") {
                             state.app.engine.setPaused(!state.model.status.paused)
                         }
                     }
@@ -436,18 +483,18 @@ private struct CodeSettings: View {
             }
             Section {
                 if state.codeSummaries.isEmpty {
-                    Text("No code folders yet. Add the folders that hold your projects.")
-                        .foregroundStyle(.secondary)
+                    Text("Todavía no hay proyectos. Añade las carpetas donde guardas tu código.")
+                        .foregroundStyle(Brand.muted)
                 }
                 ForEach(state.codeSummaries) { summary in
                     FolderStatusRow(summary: summary) { removing = summary }
                 }
             } header: {
-                Text("Code folders")
+                Text("Proyectos")
             } footer: {
                 HStack {
                     Button(action: state.addCodeFolders) {
-                        Label(state.model.hasCode ? "Add Folders…" : "Choose Code Folders…", systemImage: "plus")
+                        Label("Añadir carpetas…", systemImage: "plus")
                     }
                     Spacer()
                 }
@@ -465,29 +512,29 @@ private struct CodeSettings: View {
                                 state.app.applyCodeFolders(state.model.settings.codeRoots,
                                                            excluded: state.model.settings.codeExcluded.filter { $0 != folder })
                             } label: {
-                                Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                                Image(systemName: "minus.circle.fill").foregroundStyle(Brand.muted)
                             }
                             .buttonStyle(.plain)
-                            .help("Search this folder's code again")
+                            .help("Volver a leer el código de esta carpeta")
                         }
                     }
                     if state.model.settings.codeExcluded.isEmpty {
-                        Text("None. What git ignores, vendored and generated code are skipped anyway.")
-                            .foregroundStyle(.secondary)
+                        Text("Ninguna. Lo que git ignora, el código de terceros y el generado se omiten siempre.")
+                            .foregroundStyle(Brand.muted)
                     }
                 } header: {
-                    Text("Skip these folders")
+                    Text("Omitir estas carpetas")
                 } footer: {
                     HStack {
                         Button {
-                            state.app.pickFolders(for: NSApp.keyWindow, prompt: "Skip") { folders in
+                            state.app.pickFolders(for: NSApp.keyWindow, prompt: "Omitir") { folders in
                                 guard !folders.isEmpty else { return }
                                 let excluded = state.model.settings.codeExcluded
                                 state.app.applyCodeFolders(state.model.settings.codeRoots,
                                                            excluded: excluded + folders.filter { !excluded.contains($0) })
                             }
                         } label: {
-                            Label("Skip a Folder…", systemImage: "plus")
+                            Label("Omitir una carpeta…", systemImage: "plus")
                         }
                         Spacer()
                     }
@@ -497,82 +544,63 @@ private struct CodeSettings: View {
                 Toggle(isOn: Binding(get: { state.model.settings.indexOnBattery },
                                      set: { state.app.setIndexOnBattery($0) })) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(AppSettings.batteryTitle)
+                        Text("Leer con batería")
                         Text(AppSettings.batteryDetail)
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Brand.muted)
                     }
                 }
                 Toggle(isOn: Binding(get: { state.model.settings.indexHoursOn }, set: { on in
                     state.app.setIndexHours(on: on, hours: state.model.settings.indexHours)
                 })) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Index only at set hours")
-                        Text("Files are read only between these times, and what changed meanwhile is picked up when "
-                             + "they begin. Search works all day.")
+                        Text("Leer solo a ciertas horas")
+                        Text("Preguntar funciona todo el día.")
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .foregroundStyle(Brand.muted)
                     }
                 }
                 if state.model.settings.indexHoursOn {
-                    LabeledContent("From") {
-                        HStack(spacing: 6) {
-                            DatePicker("From", selection: time(\.start), displayedComponents: .hourAndMinute)
-                                .labelsHidden()
-                            Text("to")
-                            DatePicker("To", selection: time(\.end), displayedComponents: .hourAndMinute)
-                                .labelsHidden()
-                        }
+                    HStack(spacing: 6) {
+                        Text("De")
+                        DatePicker("De", selection: time(\.start), displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                        Text("a")
+                        DatePicker("A", selection: time(\.end), displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                        Spacer()
                     }
+                    .environment(\.locale, When.locale)
                 }
+            } header: {
+                Text("Cuándo leer")
             }
             Section {
-                Picker("Open code in", selection: Binding(get: { CodeEditor.chosen(state.model.settings.codeEditor).id },
-                                                          set: { state.app.setCodeEditor($0) })) {
+                Picker("Abrir el código en", selection: Binding(get: { CodeEditor.chosen(state.model.settings.codeEditor).id },
+                                                                set: { state.app.setCodeEditor($0) })) {
                     ForEach(CodeEditor.installed) { editor in Text(editor.name).tag(editor.id) }
                     Text(CodeEditor.defaultApp.name).tag(CodeEditor.defaultApp.id)
                 }
             } footer: {
-                Text("A place opens there at the line that matched.")
+                Text("Una pieza se abre ahí, en su línea.")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.muted)
             }
-            AnswerSettings()
-            Section {
-                Text("The code index keeps your code's text on this Mac. It skips what git ignores, vendored and "
-                     + "generated code, data files, and anything that looks like a key or a password.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if state.model.hasCode {
-                    HStack {
-                        Spacer()
-                        Button("Turn Off Code Search…", role: .destructive) { turningOff = true }
-                    }
-                }
-            }
+            AnswerSettings(state: state)
         }
         .formStyle(.grouped)
         .scrollDisabled(true)
         .onChange(of: state.model.status) { state.statusChanged() }
-        .confirmationDialog("Turn off code search?", isPresented: $turningOff) {
-            Button("Turn Off", role: .destructive) {
-                state.app.applyCodeFolders([], excluded: [])
-                Task { await state.refresh() }
-            }
-        } message: {
-            Text("The code index (\(bytes(state.codeIndexSize))) is deleted. Turning it on again reads the code again.")
-        }
-        .confirmationDialog("Stop searching the code in “\(removing.map { ($0.path as NSString).lastPathComponent } ?? "")”?",
+        .confirmationDialog("¿Dejar de leer «\(removing.map { ($0.path as NSString).lastPathComponent } ?? "")»?",
                             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
-            Button("Remove", role: .destructive) {
+            Button("Quitar", role: .destructive) {
                 guard let removing else { return }
                 state.app.removeCodeFolder(URL(fileURLWithPath: removing.path))
                 Task { await state.refresh() }
             }
+            Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("Its \(removing?.files.formatted() ?? "") code files leave the code index.")
+            Text("Sus \(removing?.files.formatted(.number.locale(When.locale)) ?? "") archivos de código salen del índice.")
         }
     }
 
@@ -591,32 +619,68 @@ private struct CodeSettings: View {
     }
 }
 
-/// Answers in the Ask window: who writes them (Pi, with its model), and what goes to that model.
+/// Answers in the Ask window: who writes them (Pi, with its model), the providers you let questions go to, and what
+/// goes there.
 private struct AnswerSettings: View {
+    let state: SettingsState
     @State private var pi = AgentRunner.locate()
+    @State private var approved = UserDefaults.standard.stringArray(forKey: "approvedProviders") ?? []
 
     var body: some View {
         Section {
-            LabeledContent("Answers by") {
+            LabeledContent("Pi") {
                 if let pi {
-                    Text("Pi, at \(tildePath(pi.path))").foregroundStyle(.secondary)
+                    Text("En \(tildePath(pi.path))").foregroundStyle(Brand.muted)
                 } else {
-                    Button("Copy Install Command") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(AnswerSheet.installCommand, forType: .string)
+                    HStack(spacing: 8) {
+                        Text("No está instalado").foregroundStyle(Brand.muted)
+                        Button("Copiar comando") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(NeedsPi.installCommand, forType: .string)
+                        }
+                        .help(NeedsPi.installCommand)
+                    }
+                }
+            }
+            LabeledContent("Modelo") {
+                // Pi says which once it has started for a question; it's chosen in Pi (/model).
+                if let agent = state.app.askWindow.ask.agentModel {
+                    Text(agent.name + (agent.local ? " · en este Mac" : "")).foregroundStyle(Brand.muted)
+                } else {
+                    Text("El que tenga elegido Pi").foregroundStyle(Brand.muted)
+                }
+            }
+            .help("Pi responde con este modelo. Se cambia en Pi, con /model.")
+            LabeledContent("Proveedores aprobados") {
+                if approved.isEmpty {
+                    Text("Ninguno").foregroundStyle(Brand.muted)
+                } else {
+                    VStack(alignment: .trailing, spacing: 6) {
+                        ForEach(approved, id: \.self) { provider in
+                            HStack(spacing: 8) {
+                                Text(provider).foregroundStyle(Brand.muted)
+                                Button("Olvidar") { forget(provider) }
+                                    .controlSize(.small)
+                                    .help("Gafitas vuelve a preguntar antes de enviar nada a \(provider)")
+                            }
+                        }
                     }
                 }
             }
         } header: {
-            Text("Answers")
+            Text("Respuestas")
         } footer: {
-            Text("Pi writes answers with the model it's set up with. Your question and the places Gafitas found go to "
-                 + "that model, and Gafitas asks before the first time one isn't on this Mac. With a local model, "
-                 + "nothing leaves.")
+            Text("Para escribir cada respuesta, Gafitas envía a través de Pi tu pregunta, los lugares que encontró y lo "
+                 + "que Pi lea de esos proyectos mientras responde. Nada más sale de este Mac.")
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Brand.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func forget(_ provider: String) {
+        approved.removeAll { $0 == provider }
+        UserDefaults.standard.set(approved, forKey: "approvedProviders")
     }
 }
 
@@ -630,10 +694,10 @@ private struct PathButton: View {
         } label: {
             HStack(spacing: 4) {
                 Text(tildePath(url.path)).lineLimit(1).truncationMode(.middle)
-                Image(systemName: "arrow.right.circle.fill").foregroundStyle(.secondary)
+                Image(systemName: "arrow.right.circle.fill").foregroundStyle(Brand.muted)
             }
         }
         .buttonStyle(.plain)
-        .help("Show in Finder")
+        .help("Mostrar en el Finder")
     }
 }

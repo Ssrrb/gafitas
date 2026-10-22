@@ -49,12 +49,6 @@ enum Brand {
     }
 
     static func hex(_ pair: Pair, dark: Bool) -> String { String(format: "#%06X", dark ? pair.dark : pair.light) }
-
-    // shortcut: DigUp's names, kept until onboarding stops using them; then delete.
-    static let amber = lit
-    static let moss = litInk
-    static let gradient = lit
-    static let wash = ground
 }
 
 /// ⇧ ⌘ Space as keycaps.
@@ -95,7 +89,7 @@ struct KindCounts: View {
             }
         }
         .font(.system(size: 11).monospacedDigit())
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Brand.muted)
         .help(description)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(description)
@@ -230,11 +224,11 @@ struct ShortcutRecorder: View {
             Button { setRecording(!recording) } label: {
                 Group {
                     if recording {
-                        Text("Pulsa el atajo nuevo…").foregroundStyle(.secondary)
+                        Text("Pulsa el atajo nuevo…").foregroundStyle(Brand.muted)
                     } else if let combo {
                         Keycaps(caps: combo.caps, size: capSize)
                     } else {
-                        Text("Haz clic para elegir un atajo").foregroundStyle(.secondary)
+                        Text("Haz clic para elegir un atajo").foregroundStyle(Brand.muted)
                     }
                 }
                 .font(.system(size: 13))

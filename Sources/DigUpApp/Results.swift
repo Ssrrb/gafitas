@@ -65,11 +65,11 @@ struct ResultRow: Identifiable, Equatable {
         return words
     }
 
-    /// The page or moment that matched, as a badge: "p. 3", "0:06", "♪ 0:25" (a video's sound), "L12–40" (code).
+    /// The page or moment that matched, as a badge: "pág. 3", "0:06", "♪ 0:25" (a video's sound), "L12–40" (code).
     var place: String? {
         guard let loc else { return nil }
         switch segment {
-        case .page, .pageImage: return "p. \(Int(loc))"
+        case .page, .pageImage: return "pág. \(Int(loc))"
         case .frame: return Self.clock(loc)
         case .audio: return kind == .video ? "♪ \(Self.clock(loc))" : Self.clock(loc)
         case .lines: return Int(loc) == Int(locEnd ?? loc) ? "L\(Int(loc))" : "L\(Int(loc))–\(Int(locEnd ?? loc))"
@@ -78,13 +78,13 @@ struct ResultRow: Identifiable, Equatable {
         }
     }
 
-    /// The lines (or a notebook's cells) of code that matched: "lines 12–40", "cell 3".
+    /// The lines (or a notebook's cells) of code that matched: "líneas 12–40", "celda 3".
     var span: String? {
         guard let loc else { return nil }
         let (first, last) = (Int(loc), Int(locEnd ?? loc))
         switch segment {
-        case .lines: return first == last ? "line \(first)" : "lines \(first)–\(last)"
-        case .cells: return first == last ? "cell \(first)" : "cells \(first)–\(last)"
+        case .lines: return first == last ? "línea \(first)" : "líneas \(first)–\(last)"
+        case .cells: return first == last ? "celda \(first)" : "celdas \(first)–\(last)"
         default: return nil
         }
     }

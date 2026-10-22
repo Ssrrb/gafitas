@@ -49,8 +49,8 @@ nonisolated struct AppSettings: Sendable {
     static let defaultHotkey = "opt+shift+space"   // DigUp has ⇧⌘Space, and both may run
 
     /// The battery switch, in onboarding and Settings.
-    static let batteryTitle = "Index on battery power"
-    static let batteryDetail = "When it's off, a folder's first pass waits for a charger. New files always go in right away."
+    static let batteryTitle = "Leer código con batería"
+    static let batteryDetail = "Si está desactivado, la primera lectura espera al cargador; lo nuevo entra enseguida."
 
     /// Where settings are saved. Reads see launch arguments first either way. (UserDefaults is thread-safe.)
     nonisolated(unsafe) static let defaults: UserDefaults = {

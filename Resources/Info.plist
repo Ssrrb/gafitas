@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+	<string>es</string>
 	<key>CFBundleDisplayName</key>
 	<string>Gafitas</string>
 	<key>CFBundleExecutable</key>
@@ -31,14 +31,14 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>Gafitas reads the folders you choose so you can ask about what's inside. Everything stays on this Mac.</string>
+	<string>Gafitas lee las carpetas que eliges para que puedas preguntar por su código. Todo se queda en este Mac.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Gafitas reads the folders you choose so you can ask about what's inside. Everything stays on this Mac.</string>
+	<string>Gafitas lee las carpetas que eliges para que puedas preguntar por su código. Todo se queda en este Mac.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Gafitas reads the folders you choose so you can ask about what's inside. Everything stays on this Mac.</string>
+	<string>Gafitas lee las carpetas que eliges para que puedas preguntar por su código. Todo se queda en este Mac.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSRemovableVolumesUsageDescription</key>
-	<string>Gafitas reads the folders you choose so you can ask about what's inside. Everything stays on this Mac.</string>
+	<string>Gafitas lee las carpetas que eliges para que puedas preguntar por su código. Todo se queda en este Mac.</string>
 </dict>
 </plist>

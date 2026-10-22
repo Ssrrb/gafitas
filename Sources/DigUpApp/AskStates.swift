@@ -254,11 +254,6 @@ struct NeedsPi: View {
     static let installCommand = "npm install -g @earendil-works/pi-coding-agent"
 }
 
-// shortcut: the old name Settings uses; drop it once Settings says NeedsPi.installCommand.
-enum AnswerSheet {
-    static let installCommand = NeedsPi.installCommand
-}
-
 /// The provider a question would go to, for the privacy sheet.
 struct Provider: Identifiable {
     let name: String

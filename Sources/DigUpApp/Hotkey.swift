@@ -5,15 +5,15 @@ import Carbon.HIToolbox
 nonisolated struct KeyCombo: Equatable, Sendable {
     let keyCode: UInt32
     let carbonModifiers: UInt32
-    let display: String   // "⇧⌘Space"
+    let display: String   // "⇧⌘Espacio"
     /// "cmd+shift+space": how it's saved.
     let spec: String
-    /// The keycaps, in order: ["⇧", "⌘", "Space"].
+    /// The keycaps, in order: ["⇧", "⌘", "Espacio"].
     let caps: [String]
 
     private static let keys: [String: (code: Int, name: String)] = {
         var keys: [String: (Int, String)] = [
-            "space": (kVK_Space, "Space"), "return": (kVK_Return, "↩"), "tab": (kVK_Tab, "⇥"),
+            "space": (kVK_Space, "Espacio"), "return": (kVK_Return, "↩"), "tab": (kVK_Tab, "⇥"),
             "escape": (kVK_Escape, "⎋"), "esc": (kVK_Escape, "⎋"), "slash": (kVK_ANSI_Slash, "/"),
             "period": (kVK_ANSI_Period, "."), "comma": (kVK_ANSI_Comma, ","), "semicolon": (kVK_ANSI_Semicolon, ";"),
             "quote": (kVK_ANSI_Quote, "'"), "backslash": (kVK_ANSI_Backslash, "\\"), "grave": (kVK_ANSI_Grave, "`"),
@@ -83,7 +83,7 @@ nonisolated struct KeyCombo: Equatable, Sendable {
         spec = (parts + [name.spec]).joined(separator: "+")
     }
 
-    /// Key code → its name in a spec ("space") and on a keycap ("Space").
+    /// Key code → its name in a spec ("space") and on a keycap ("Espacio").
     private static let names: [Int: (spec: String, display: String)] = {
         var names: [Int: (String, String)] = [:]
         for (spec, key) in keys.sorted(by: { $0.key.count > $1.key.count }) {   // "escape" wins over "esc"
@@ -105,19 +105,19 @@ nonisolated struct KeyCombo: Equatable, Sendable {
         }
         guard taken else { return nil }
         switch (Int(keyCode), Int(carbonModifiers)) {
-        case (kVK_Space, cmdKey): return "Spotlight uses \(display)"
-        case (kVK_Space, cmdKey | optionKey): return "Finder's search window uses \(display)"
-        case (kVK_Space, controlKey), (kVK_Space, controlKey | optionKey): return "Switching input sources uses \(display)"
-        case (kVK_Space, controlKey | cmdKey): return "The emoji picker uses \(display)"
+        case (kVK_Space, cmdKey): return "Spotlight ya usa \(display)"
+        case (kVK_Space, cmdKey | optionKey): return "La ventana de búsqueda del Finder ya usa \(display)"
+        case (kVK_Space, controlKey), (kVK_Space, controlKey | optionKey): return "Cambiar de fuente de entrada ya usa \(display)"
+        case (kVK_Space, controlKey | cmdKey): return "El selector de emoji ya usa \(display)"
         case (kVK_ANSI_3, cmdKey | shiftKey), (kVK_ANSI_4, cmdKey | shiftKey), (kVK_ANSI_5, cmdKey | shiftKey):
-            return "Screenshots use \(display)"
-        default: return "macOS uses \(display) for one of its shortcuts"
+            return "Las capturas de pantalla ya usan \(display)"
+        default: return "macOS ya usa \(display) para uno de sus atajos"
         }
     }
 }
 
 extension KeyCombo {
-    /// The combo as an NSMenuItem key equivalent, so the menu shows it next to Search….
+    /// The combo as an NSMenuItem key equivalent, so the menu shows it next to Nueva pregunta….
     var menuEquivalent: (String, NSEvent.ModifierFlags)? {
         var flags: NSEvent.ModifierFlags = []
         if carbonModifiers & UInt32(cmdKey) != 0 { flags.insert(.command) }
@@ -126,7 +126,7 @@ extension KeyCombo {
         if carbonModifiers & UInt32(controlKey) != 0 { flags.insert(.control) }
         let name = display.trimmingCharacters(in: CharacterSet(charactersIn: "⌃⌥⇧⌘"))
         switch name {
-        case "Space": return (" ", flags)
+        case "Espacio": return (" ", flags)
         case _ where name.count == 1: return (name.lowercased(), flags)
         default: return nil
         }

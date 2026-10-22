@@ -28,7 +28,7 @@ swift build -c release --product DigUpApp
 swift build -c release --product digup
 BIN_DIR="$(swift build -c release --show-bin-path)"
 
-# The app icon ("One space", moss; Resources/AppIcon/README.md): macOS 26 draws the layered AppIcon.icon (compiled into
+# The app icon (green sunglasses on blue watercolor; Resources/AppIcon/README.md): macOS 26 draws the layered AppIcon.icon (compiled into
 # Assets.car), older macOS the .icns. Without the former, macOS 26 shows the icon shrunk inside a gray square.
 ICON="Resources/AppIcon.icns"
 
@@ -43,14 +43,13 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 if xcrun --find actool > /dev/null 2>&1; then
   xcrun actool --compile "$APP/Contents/Resources" --platform macosx --target-device mac --minimum-deployment-target 14.0 \
     --app-icon AppIcon --output-partial-info-plist "$(mktemp -d)/AppIcon.plist" --enable-on-demand-resources NO \
-    --development-region en "$PWD/Resources/AppIcon/AppIcon.icon" > /dev/null
+    --development-region es "$PWD/Resources/AppIcon/AppIcon.icon" > /dev/null
 fi
 cp "$ICON" "$APP/Contents/Resources/AppIcon.icns"   # over actool's plainer fallback: ours has simplified 16 and 32 px
 cp Resources/Acknowledgements.txt "$APP/Contents/Resources/Acknowledgements.txt"
 # The Ask window's answer page (answer-ui/, built into Resources/answer-ui) and Pi's extension and instructions.
 scripts/build-answer-ui.sh
 cp -R Resources/answer-ui Resources/pi "$APP/Contents/Resources/"
-cp Resources/AppIcon/tray.png Resources/AppIcon/tray-dim.png Resources/AppIcon/tray-paused.png "$APP/Contents/Resources/"   # the menubar's logo
 
 PLIST="$APP/Contents/Info.plist"
 [[ -n "${BUNDLE_ID:-}" ]] && /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$PLIST"

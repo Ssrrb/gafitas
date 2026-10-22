@@ -103,7 +103,7 @@ private struct TopBar: View {
                             Circle().fill(ask.tint(ofRepo: repo)).frame(width: 6, height: 6)
                             Text(repo)
                         }
-                        Text("· \(When.long(chat.created))")
+                        Text((chat.projects.isEmpty ? "" : "· ") + When.long(chat.created))
                     }
                     .font(.system(size: 11))
                     .foregroundStyle(Brand.muted)

@@ -8,29 +8,45 @@ struct AnswerSheet: View {
     let app: AppController
 
     var body: some View {
-        switch ask.answer {
-        case .idle: before
-        case .needsPi: needsPi
-        case .working, .done, .failed: drawn
-        }
-    }
-
-    /// The answer as it's drawn: what Pi is doing, the page, and a follow-up under it.
-    private var drawn: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Picker("Show", selection: $ask.tab) {
+                    Text("Answer").tag(AskTab.answer)
+                    Text("Map").tag(AskTab.map)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("The answer (⌘1) or the map of your code (⌘2)")
                 if ask.answer == .working { ProgressView().controlSize(.small) }
-                Text(ask.progress)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if ask.answer != .idle {
+                    Text(ask.progress)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer()
                 if ask.answer == .working {
                     Button("Stop", action: ask.stop).controlSize(.small).help("Stop the answer (⌘.)")
                 }
             }
             .padding(.horizontal, 16)
-            .frame(height: 34)
+            .frame(height: 40)
+            if ask.tab == .map {
+                CodeMapView(ask: ask)
+            } else {
+                switch ask.answer {
+                case .idle: before
+                case .needsPi: needsPi
+                case .working, .done, .failed: drawn
+                }
+            }
+        }
+    }
+
+    /// The answer as it's drawn, and a follow-up under it.
+    private var drawn: some View {
+        VStack(spacing: 0) {
             if case .failed(let problem) = ask.answer {
                 Text("The answer stopped partway: \(problem). What it drew so far stays.")
                     .font(.system(size: 12))

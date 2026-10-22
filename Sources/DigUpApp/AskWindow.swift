@@ -130,6 +130,8 @@ final class AskWindowController: NSObject, NSWindowDelegate {
             toggleQuickLook()
         case 16 where modifiers == .command:   // ⌘Y
             toggleQuickLook()
+        case 18, 19 where modifiers == .command:   // ⌘1 answer, ⌘2 map
+            ask.tab = event.keyCode == 18 ? .answer : .map
         case 38 where modifiers == .command:   // ⌘J
             ask.followUpField?.window?.makeFirstResponder(ask.followUpField)
         case 47 where modifiers == .command && ask.answer == .working:   // ⌘.
@@ -187,6 +189,52 @@ struct Project: Identifiable, Equatable {
     var name: String { (path as NSString).lastPathComponent }
 }
 
+enum AskTab: Hashable {
+    case answer, map
+}
+
+/// The code map, ready to draw: each vector's dot from 0 to 1 across the sheet, its file and its folder's tint.
+struct MapData {
+    struct Dot {
+        let x: CGFloat
+        let y: CGFloat
+        let segment: Int64
+        let path: String
+        let tint: Int
+    }
+
+    let code: CodeMap
+    let dots: [Dot]
+    private let minimum: (x: Float, y: Float)
+    private let span: (x: Float, y: Float)
+
+    init(_ code: CodeMap, paths: [Int64: String], projects: [Project]) {
+        self.code = code
+        // The middle 98% of each axis fills the sheet: one far-off stretch shouldn't squeeze the rest into a corner.
+        func range(_ values: [Float]) -> (Float, Float) {
+            let sorted = values.sorted()
+            guard !sorted.isEmpty else { return (0, 1) }
+            let low = sorted[Int(Double(sorted.count - 1) * 0.01)], high = sorted[Int(Double(sorted.count - 1) * 0.99)]
+            return (low, max(high - low, 1e-6))
+        }
+        let (x0, xs) = range(code.x), (y0, ys) = range(code.y)
+        minimum = (x0, y0)
+        span = (xs, ys)
+        dots = code.x.indices.map { index in
+            let path = paths[code.files[index]] ?? ""
+            let tint = projects.filter { path.hasPrefix($0.path + "/") }.max { $0.path.count < $1.path.count }?.index ?? 99
+            return Dot(x: CGFloat(min(max((code.x[index] - x0) / xs, 0), 1)),
+                       y: CGFloat(min(max((code.y[index] - y0) / ys, 0), 1)),
+                       segment: code.segments[index], path: path, tint: tint)
+        }
+    }
+
+    func normalized(_ point: (x: Float, y: Float)) -> CGPoint {
+        CGPoint(x: CGFloat(min(max((point.x - minimum.x) / span.x, 0), 1)),
+                y: CGFloat(min(max((point.y - minimum.y) / span.y, 0), 1)))
+    }
+}
+
 /// Where the answer is.
 enum AnswerPhase: Equatable {
     case idle
@@ -238,6 +286,14 @@ final class AskModel {
     }
     /// You moved through the places with the arrow keys since the last edit: ↩, ⌫ and Space act on them then.
     private(set) var navigated = false
+
+    /// The sheet shows the answer, or the map of the code (⌘1, ⌘2).
+    var tab = AskTab.answer {
+        didSet { if tab == .map, map == nil { loadMap() } }
+    }
+    private(set) var map: MapData?
+    /// The question's vector, for its place on the map.
+    private(set) var questionVector: [Float]?
 
     // The answer.
     private(set) var answer = AnswerPhase.idle
@@ -331,6 +387,19 @@ final class AskModel {
             let summaries = await engine.rootSummaries(code: true)
             projects = summaries.enumerated().map { Project(path: $1.path, files: $1.indexed, index: $0) }
         }
+    }
+
+    func loadMap() {
+        Task {
+            guard let (code, paths) = await engine.codeMap() else { return }
+            map = MapData(code, paths: paths, projects: projects)
+        }
+    }
+
+    /// Where the question lands on the map, once it's dug up.
+    var questionPlace: CGPoint? {
+        guard let map, let questionVector, !trimmed.isEmpty else { return nil }
+        return map.normalized(map.code.place(questionVector))
     }
 
     func toggle(_ project: Project) {
@@ -635,6 +704,7 @@ final class AskModel {
         task = Task {
             let vector = await engine.embedQuery(text, code: true)
             guard !Task.isCancelled, current == generation else { return }
+            questionVector = vector?.values
             let hits = await engine.search(text, vector: vector, prefixLast: false, limit: 40, code: true,
                                            zGate: Self.zGate)
             try? await Task.sleep(until: showAt, tolerance: .milliseconds(1), clock: .continuous)

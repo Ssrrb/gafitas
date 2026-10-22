@@ -1,20 +1,24 @@
 /* Theme tokens. Swift injects the real values with window.gafitas.theme({...}) (inline styles on <html>, which
    win over these); the defaults here make the page right on its own, following prefers-color-scheme unless
-   <html data-theme> says otherwise. */
+   <html data-theme> says otherwise. Lime is "lit", the one colour of attention; p1–p3 are projects. */
 :root {
-  --g-ground: #f5f5f7;
+  --g-ground: #f3f5f8;
   --g-sheet: #ffffff;
+  --g-edge: #e3e5ea;
   --g-text: #1d1d1f;
-  --g-muted: #6e6e73;
-  --g-faint: #aeaeb2;
-  --g-fill: #f2f2f4;
+  --g-muted: #5f6368;
+  --g-fill: #eef0f4;
+  --g-active: #e4e6eb;
   --g-accent: #007aff;
-  --g-amber: #d97b1a;
-  --g-moss: #3f7a4c;
-  --g-p1: #4f8058;
-  --g-p2: #2f6fb0;
-  --g-p3: #b8336a;
-  --g-p4: #8a6d3b;
+  --g-lit: #3f9612;
+  --g-lit-ink: #2e7d0b;
+  --g-lit-fill: #e0fed2;
+  --g-negative: #c4242a;
+  --g-p1: #2552c9;
+  --g-p2: #b8336a;
+  --g-p3: #9a6212;
+  --g-p4: #5f6368;
+  --g-pale: 12%;
   --g-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --g-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   color-scheme: light;
@@ -22,106 +26,60 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --g-ground: #161616;
-    --g-sheet: #1e1e1e;
+    --g-ground: #17181b;
+    --g-sheet: #1f2023;
+    --g-edge: #2e2f34;
     --g-text: #ececec;
-    --g-muted: #a1a1a6;
-    --g-faint: #636366;
-    --g-fill: #2a2a2c;
+    --g-muted: #a8a8ae;
+    --g-fill: #2a2b2f;
+    --g-active: #2c2d32;
     --g-accent: #0a84ff;
-    --g-amber: #f2a22a;
-    --g-moss: #8cc08a;
-    --g-p1: #a2c78e;
-    --g-p2: #6fa3e0;
-    --g-p3: #e07aa6;
-    --g-p4: #d0b07a;
+    --g-lit: #86e04a;
+    --g-lit-ink: #86e04a;
+    --g-lit-fill: #334527;
+    --g-negative: #e5566f;
+    --g-p1: #7ea2f5;
+    --g-p2: #e77aa8;
+    --g-p3: #e0a23e;
+    --g-p4: #a8a8ae;
+    --g-pale: 18%;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --g-ground: #161616;
-  --g-sheet: #1e1e1e;
+  --g-ground: #17181b;
+  --g-sheet: #1f2023;
+  --g-edge: #2e2f34;
   --g-text: #ececec;
-  --g-muted: #a1a1a6;
-  --g-faint: #636366;
-  --g-fill: #2a2a2c;
+  --g-muted: #a8a8ae;
+  --g-fill: #2a2b2f;
+  --g-active: #2c2d32;
   --g-accent: #0a84ff;
-  --g-amber: #f2a22a;
-  --g-moss: #8cc08a;
-  --g-p1: #a2c78e;
-  --g-p2: #6fa3e0;
-  --g-p3: #e07aa6;
-  --g-p4: #d0b07a;
+  --g-lit: #86e04a;
+  --g-lit-ink: #86e04a;
+  --g-lit-fill: #334527;
+  --g-negative: #e5566f;
+  --g-p1: #7ea2f5;
+  --g-p2: #e77aa8;
+  --g-p3: #e0a23e;
+  --g-p4: #a8a8ae;
+  --g-pale: 18%;
   color-scheme: dark;
 }
 
-/* The kit's tokens, derived from the sheet so fills hide what's behind without showing as patches, and the lit
-   part is amber: the one colour in a figure. Light first. */
-.iso {
-  --anatomy-card: var(--g-sheet);
-  --anatomy-paper: var(--g-sheet);
-  --anatomy-page: transparent;
-  --anatomy-text: var(--g-muted);
-  --anatomy-strong: var(--g-text);
-  --anatomy-muted: var(--g-muted);
-  --anatomy-face: var(--g-sheet);
-  --anatomy-top: var(--g-sheet);
-  --anatomy-shade-0: color-mix(in srgb, var(--g-text) 15%, var(--g-sheet));
-  --anatomy-shade-1: color-mix(in srgb, var(--g-text) 10.5%, var(--g-sheet));
-  --anatomy-shade-2: color-mix(in srgb, var(--g-text) 6.5%, var(--g-sheet));
-  --anatomy-shade-3: color-mix(in srgb, var(--g-text) 3%, var(--g-sheet));
-  --anatomy-hi: color-mix(in srgb, var(--g-text) 90%, var(--g-sheet));
-  --anatomy-mid: color-mix(in srgb, var(--g-text) 52%, var(--g-sheet));
-  --anatomy-lo: color-mix(in srgb, var(--g-text) 32%, var(--g-sheet));
-  --anatomy-faint: color-mix(in srgb, var(--g-text) 17%, var(--g-sheet));
-  --anatomy-lit: var(--g-amber);
-  --anatomy-lit-top: color-mix(in srgb, var(--g-amber) 13%, var(--g-sheet));
-  --anatomy-lit-shade: color-mix(in srgb, var(--g-amber) 24%, var(--g-sheet));
-  --anatomy-lit-face: color-mix(in srgb, var(--g-amber) 18%, var(--g-sheet));
-  --anatomy-halo: #6f6f68;
-  --anatomy-halo-opacity: 0.22;
-  --anatomy-dot: color-mix(in srgb, var(--g-text) 80%, var(--g-sheet));
-  --anatomy-mono: var(--g-mono);
-  --anatomy-weight: 0.6px;
+/* Project tints, pale: a tile's fill, a found place. Swift may send its own --g-pN-pale. */
+:root {
+  --g-p1-pale: color-mix(in srgb, var(--g-p1) var(--g-pale), var(--g-sheet));
+  --g-p2-pale: color-mix(in srgb, var(--g-p2) var(--g-pale), var(--g-sheet));
+  --g-p3-pale: color-mix(in srgb, var(--g-p3) var(--g-pale), var(--g-sheet));
+  --g-p4-pale: color-mix(in srgb, var(--g-p4) var(--g-pale), var(--g-sheet));
+  /* One release: the old name for "lit". */
+  --g-amber: var(--g-lit);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .iso {
-    --anatomy-shade-0: color-mix(in srgb, #000 20%, var(--g-sheet));
-    --anatomy-shade-1: color-mix(in srgb, #000 7%, var(--g-sheet));
-    --anatomy-shade-2: color-mix(in srgb, var(--g-text) 3.5%, var(--g-sheet));
-    --anatomy-shade-3: color-mix(in srgb, var(--g-text) 7.5%, var(--g-sheet));
-    --anatomy-top: color-mix(in srgb, var(--g-text) 11.5%, var(--g-sheet));
-    --anatomy-face: color-mix(in srgb, var(--g-text) 7%, var(--g-sheet));
-    --anatomy-hi: color-mix(in srgb, var(--g-text) 86%, var(--g-sheet));
-    --anatomy-mid: color-mix(in srgb, var(--g-text) 48%, var(--g-sheet));
-    --anatomy-lo: color-mix(in srgb, var(--g-text) 25%, var(--g-sheet));
-    --anatomy-faint: color-mix(in srgb, var(--g-text) 14%, var(--g-sheet));
-    --anatomy-lit-top: color-mix(in srgb, var(--g-amber) 26%, var(--g-sheet));
-    --anatomy-lit-shade: color-mix(in srgb, var(--g-amber) 15%, var(--g-sheet));
-    --anatomy-lit-face: color-mix(in srgb, var(--g-amber) 20%, var(--g-sheet));
-    --anatomy-halo: #000;
-    --anatomy-halo-opacity: 0.5;
-    --anatomy-dot: var(--g-text);
+@media (prefers-contrast: more) {
+  :root {
+    --g-edge: color-mix(in srgb, var(--g-text) 30%, var(--g-sheet));
   }
-}
-
-:root[data-theme="dark"] .iso {
-  --anatomy-shade-0: color-mix(in srgb, #000 20%, var(--g-sheet));
-  --anatomy-shade-1: color-mix(in srgb, #000 7%, var(--g-sheet));
-  --anatomy-shade-2: color-mix(in srgb, var(--g-text) 3.5%, var(--g-sheet));
-  --anatomy-shade-3: color-mix(in srgb, var(--g-text) 7.5%, var(--g-sheet));
-  --anatomy-top: color-mix(in srgb, var(--g-text) 11.5%, var(--g-sheet));
-  --anatomy-face: color-mix(in srgb, var(--g-text) 7%, var(--g-sheet));
-  --anatomy-hi: color-mix(in srgb, var(--g-text) 86%, var(--g-sheet));
-  --anatomy-mid: color-mix(in srgb, var(--g-text) 48%, var(--g-sheet));
-  --anatomy-lo: color-mix(in srgb, var(--g-text) 25%, var(--g-sheet));
-  --anatomy-faint: color-mix(in srgb, var(--g-text) 14%, var(--g-sheet));
-  --anatomy-lit-top: color-mix(in srgb, var(--g-amber) 26%, var(--g-sheet));
-  --anatomy-lit-shade: color-mix(in srgb, var(--g-amber) 15%, var(--g-sheet));
-  --anatomy-lit-face: color-mix(in srgb, var(--g-amber) 20%, var(--g-sheet));
-  --anatomy-halo: #000;
-  --anatomy-halo-opacity: 0.5;
-  --anatomy-dot: var(--g-text);
 }

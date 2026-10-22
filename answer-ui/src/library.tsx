@@ -1,83 +1,65 @@
 // The OpenUI library: the only components a model may write. Zod key order is the positional order in
-// OpenUI Lang, so every schema below is also the call signature the model sees in its system prompt.
+// OpenUI Lang, so every schema below is also the call signature the model sees in its system prompt. No .max()
+// on strings: an invalid prop would drop the whole node mid-stream; validate.ts reports limits instead.
 import "./zod-setup";
 import * as React from "react";
 import { createLibrary, defineComponent, useRenderNode } from "@openuidev/react-lang";
 import { z } from "zod/v4";
-import { CalloutBlock, CheckBlock, CodeRefBlock, CompareBlock, NewCodeBlock, SnippetBlock, TextBlock, type NewItemProps, type SideProps, Inline } from "./components/blocks";
-import { FigBlock, FigNumber } from "./components/Fig";
-import { ROLES } from "./machines/slots";
+import { CalloutBlock, CheckBlock, CompareBlock, Inline, SnippetBlock, TextBlock, type SideProps } from "./components/blocks";
+import { PuzzleBlock } from "./components/Puzzle";
 
 export const ROOT = "Answer";
 
 const nothing = () => null;
 
-export const Part = defineComponent({
-  name: "Part",
-  description:
-    'One part of the machine. label: 1–3 words for what it does (not a file name). role: its slot in the machine. ref: a ref id from the list ("r3", or "r3:18" for one line), or "" when it isn\'t in the code. note: one short line. status: "exists" (in the code; needs a ref), "new" (to be written), "concept" (no refs at all).',
-  props: z.object({
-    label: z.string().max(28),
-    role: z.enum(ROLES),
-    ref: z.string(),
-    note: z.string().max(90).optional(),
-    status: z.enum(["exists", "new", "concept"]).default("exists"),
-  }),
+export const Piece = defineComponent({
+  name: "Piece",
+  description: 'Code that exists. name: as written in the code ("HTTPAdapter.send"), at most 32 characters. ref: its ref. kind: function, method, class, module, type, value or file.',
+  props: z.object({ name: z.string(), ref: z.string(), kind: z.string().optional() }),
+  component: nothing,
+});
+
+export const NewPiece = defineComponent({
+  name: "NewPiece",
+  description: 'Code the user would still write, drawn as an empty tile in the gap. project: the repo it goes in, as in the list. path: a proposed file. from: the ref it adapts, or "". note: what it does, at most 8 words.',
+  props: z.object({ name: z.string(), project: z.string(), path: z.string(), from: z.string().optional(), note: z.string().optional() }),
+  component: nothing,
+});
+
+export const Idea = defineComponent({
+  name: "Idea",
+  description: "A piece of a concept, with no code (when there are no refs). note: at most 8 words.",
+  props: z.object({ name: z.string(), note: z.string().optional() }),
+  component: nothing,
+});
+
+const pieceRef = () => z.union([Piece.ref, NewPiece.ref, Idea.ref]);
+
+export const Joint = defineComponent({
+  name: "Joint",
+  description: "Where two pieces fit. from: the piece that calls or gives; to: the piece that receives (ids like p1). label: what crosses (arguments, data or a returned value), at most 40 characters.",
+  props: z.object({ from: pieceRef(), to: pieceRef(), label: z.string() }),
   component: nothing,
 });
 
 export const Step = defineComponent({
   name: "Step",
-  description: "One moment of the motion. lit: the number of the part it lights (1 = the first part in the list). text: at most 20 words. value: a true number to show in the readout. fails: true when this step sends the work to the reject.",
-  props: z.object({
-    lit: z.number().int(),
-    text: z.string().max(140),
-    value: z.number().optional(),
-    fails: z.boolean().optional(),
-  }),
+  description: "One moment, in order. lit: the id of the piece or joint it lights. text: at most 20 words.",
+  props: z.object({ lit: z.union([Piece.ref, NewPiece.ref, Idea.ref, Joint.ref]), text: z.string() }),
   component: nothing,
 });
 
-// Each component needs its own schema object: defineComponent tags the schema with the component's name.
-const machineProps = () =>
-  z.object({
-    parts: z.array(Part.ref),
-    steps: z.array(Step.ref),
-    readout: z.string().optional(),
-  });
-
-export const Coupling = defineComponent({
-  name: "Coupling",
-  description:
-    "Machine for connecting system A to system B: two housings joined by a shaft and a coupling. Roles: a_part (up to 3, inside A), a_port (one, required: where A hands off), key (one, optional: the shape both sides agree on), adapter (one, required: the piece that converts), b_port (one, required: where B takes it in), b_part (up to 3, inside B).",
-  props: machineProps(),
-  component: nothing,
-});
-
-export const Conveyor = defineComponent({
-  name: "Conveyor",
-  description:
-    "Machine for steps in order (a pipeline, a request passing through layers): a belt carries a tote past stations. Roles: intake (one, optional: where work comes in), station (1 to 6, in order), reject (one, optional: where failed work goes), output (one, optional: where finished work ends).",
-  props: machineProps(),
-  component: nothing,
-});
-
-export const Fig = defineComponent({
-  name: "Fig",
-  description: "A numbered figure: the machine, drawn and animated, with its steps and parts listed under it. caption: one true sentence. At most 2 per answer.",
+export const Puzzle = defineComponent({
+  name: "Puzzle",
+  description: "The figure: each piece is a jigsaw tile for one real unit of code; joints are where one hands work to the next. At most 1. title: at most 8 words. caption: one true sentence.",
   props: z.object({
     title: z.string(),
-    machine: z.union([Coupling.ref, Conveyor.ref]),
-    caption: z.string(),
+    pieces: z.array(pieceRef()),
+    joints: z.array(Joint.ref),
+    steps: z.array(Step.ref),
+    caption: z.string().optional(),
   }),
-  component: ({ props }) => <FigBlock title={props.title} machine={props.machine} caption={props.caption} />,
-});
-
-export const CodeRef = defineComponent({
-  name: "CodeRef",
-  description: "A link to one ref, shown as a chip. label: an optional short name.",
-  props: z.object({ ref: z.string(), label: z.string().optional() }),
-  component: ({ props }) => <CodeRefBlock cite={props.ref} label={props.label} />,
+  component: ({ props }) => <PuzzleBlock props={props as Record<string, unknown>} />,
 });
 
 export const Snippet = defineComponent({
@@ -112,23 +94,6 @@ export const Compare = defineComponent({
   },
 });
 
-export const NewItem = defineComponent({
-  name: "NewItem",
-  description: "path: a proposed path for the new file or function. what: what it does. adapts: the ref it adapts.",
-  props: z.object({ path: z.string(), what: z.string(), adapts: z.string() }),
-  component: nothing,
-});
-
-export const NewCode = defineComponent({
-  name: "NewCode",
-  description: "What the user would write new. When there are refs, end the answer with it.",
-  props: z.object({ items: z.array(NewItem.ref) }),
-  component: ({ props }) => {
-    const items = (Array.isArray(props.items) ? props.items : []).filter((n) => n && (n as { typeName?: string }).typeName === "NewItem").map((n) => (n as { props: NewItemProps }).props);
-    return <NewCodeBlock items={items} />;
-  },
-});
-
 export const Check = defineComponent({
   name: "Check",
   description: "A one-question check. options: exactly 3. answer: the number of the right option (1, 2 or 3). why: one sentence.",
@@ -143,30 +108,26 @@ export const Text = defineComponent({
   component: ({ props }) => <TextBlock md={props.md} />,
 });
 
-const LIMIT: Record<string, number> = { Fig: 2, Snippet: 2, Text: 3 };
-const BLOCK_TYPES = new Set(["Fig", "CodeRef", "Snippet", "Callout", "Compare", "NewCode", "Check", "Text"]);
+export const LIMITS = { Puzzle: 1, Snippet: 2, Text: 3 } as const;
+export const BLOCKS = ["Puzzle", "Snippet", "Callout", "Compare", "Check", "Text"] as const;
 
 function AnswerView({ lede, blocks }: { lede: string; blocks: unknown[] }) {
   const renderNode = useRenderNode();
   const seen: Record<string, number> = {};
-  let figs = 0;
   return (
     <article className="g-answer">
-      {lede ? <h1 className="g-lede"><Inline md={lede} /></h1> : null}
+      {lede ? (
+        <p className="g-lede">
+          <Inline md={lede} />
+        </p>
+      ) : null}
       {blocks.map((block, i) => {
         const type = (block as { typeName?: string } | null)?.typeName ?? "";
-        if (!BLOCK_TYPES.has(type)) return null;
+        if (!(BLOCKS as readonly string[]).includes(type)) return null;
         seen[type] = (seen[type] ?? 0) + 1;
-        if (LIMIT[type] && seen[type]! > LIMIT[type]!) return null;
+        const limit = LIMITS[type as keyof typeof LIMITS];
+        if (limit && seen[type]! > limit) return null;
         const id = (block as { statementId?: string }).statementId ?? `${type}-${i}`;
-        if (type === "Fig") {
-          figs += 1;
-          return (
-            <FigNumber.Provider key={id} value={figs}>
-              {renderNode(block)}
-            </FigNumber.Provider>
-          );
-        }
         return <React.Fragment key={id}>{renderNode(block)}</React.Fragment>;
       })}
     </article>
@@ -175,15 +136,15 @@ function AnswerView({ lede, blocks }: { lede: string; blocks: unknown[] }) {
 
 export const Answer = defineComponent({
   name: "Answer",
-  description: "The answer. lede: one plain sentence that answers the question (at most 2 lines). blocks: the figure first, then code and words.",
+  description: "The answer. lede: one plain sentence that answers the question (at most 25 words). blocks: the Puzzle first, then code and words.",
   props: z.object({
     lede: z.string(),
-    blocks: z.array(z.union([Fig.ref, Snippet.ref, CodeRef.ref, Callout.ref, Compare.ref, NewCode.ref, Check.ref, Text.ref])),
+    blocks: z.array(z.union([Puzzle.ref, Snippet.ref, Callout.ref, Compare.ref, Check.ref, Text.ref])),
   }),
   component: ({ props }) => <AnswerView lede={props.lede} blocks={Array.isArray(props.blocks) ? props.blocks : []} />,
 });
 
 export const library = createLibrary({
   root: ROOT,
-  components: [Answer, Fig, Coupling, Conveyor, Part, Step, Snippet, CodeRef, Callout, Compare, Side, NewCode, NewItem, Check, Text],
+  components: [Answer, Puzzle, Piece, NewPiece, Idea, Joint, Step, Snippet, Callout, Compare, Side, Check, Text],
 });

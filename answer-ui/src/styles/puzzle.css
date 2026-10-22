@@ -1,0 +1,431 @@
+/* The puzzle figure: pale project tiles with neutral edges, one lit thing in lime, words in HTML on top. */
+.g-puzzle {
+  margin: 0;
+}
+
+.g-card {
+  position: relative;
+  padding: 14px 16px;
+  border: 1px solid var(--g-edge);
+  border-radius: 12px;
+  background: var(--g-sheet);
+}
+
+.g-card:focus {
+  outline: none;
+}
+
+.g-card:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 2px;
+}
+
+.g-puzzle-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-bottom: 16px;
+}
+
+.g-puzzle-title {
+  font-size: 14px;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.g-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  color: var(--g-muted);
+  font-size: 12px;
+  list-style: none;
+}
+
+.g-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.g-swatch {
+  width: 14px;
+  height: 10px;
+  border: 1px solid color-mix(in srgb, var(--g-text) 22%, var(--g-sheet));
+  border-radius: 3px;
+  background: var(--g-p1-pale);
+}
+
+.g-swatch[data-tint="2"] {
+  background: var(--g-p2-pale);
+}
+
+.g-swatch[data-tint="3"] {
+  background: var(--g-p3-pale);
+}
+
+.g-swatch[data-tint="4"] {
+  background: var(--g-p4-pale);
+}
+
+.g-swatch[data-type="new"] {
+  border: 1.5px dashed color-mix(in srgb, var(--g-text) 45%, var(--g-sheet));
+  background: none;
+}
+
+.g-swatch[data-type="idea"] {
+  background: color-mix(in srgb, var(--g-text) 6%, var(--g-sheet));
+}
+
+/* The stage: the SVG shapes under absolutely placed words, both in the same pixels. */
+.g-stage {
+  position: relative;
+}
+
+.g-puzzle-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  overflow: visible;
+}
+
+.g-fill {
+  fill: color-mix(in srgb, var(--g-text) 5%, var(--g-sheet));
+  transition: fill 120ms ease-out;
+}
+
+.g-fill[data-tint="1"] {
+  fill: var(--g-p1-pale);
+}
+
+.g-fill[data-tint="2"] {
+  fill: var(--g-p2-pale);
+}
+
+.g-fill[data-tint="3"] {
+  fill: var(--g-p3-pale);
+}
+
+.g-fill[data-tint="4"] {
+  fill: var(--g-p4-pale);
+}
+
+.g-fill[data-type="Idea"] {
+  fill: color-mix(in srgb, var(--g-text) 6%, var(--g-sheet));
+}
+
+.g-fill[data-type="NewPiece"] {
+  fill: var(--g-sheet);
+}
+
+.g-fill[data-lit] {
+  fill: var(--g-lit-fill);
+}
+
+.g-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--g-text) 22%, var(--g-sheet));
+  stroke-width: 1;
+}
+
+.g-edge[data-type="NewPiece"] {
+  stroke: color-mix(in srgb, var(--g-text) 45%, var(--g-sheet));
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.g-lit-edge {
+  fill: none;
+  stroke: var(--g-lit);
+  stroke-width: 4;
+}
+
+.g-hover-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--g-text) 50%, var(--g-sheet));
+  stroke-width: 3;
+}
+
+.g-knob-lit {
+  fill: var(--g-lit-fill);
+  stroke: var(--g-lit);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.g-knob-hover {
+  fill: none;
+  stroke: color-mix(in srgb, var(--g-text) 70%, var(--g-sheet));
+  stroke-width: 1.5;
+}
+
+.g-tiles,
+.g-joints,
+.g-loose {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-tile-slot {
+  position: absolute;
+}
+
+.g-tile {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 34px 14px 14px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--g-text);
+  text-align: left;
+}
+
+button.g-tile {
+  cursor: pointer;
+}
+
+.g-tile-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font: 600 13px/18px var(--g-mono);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.g-idea-name {
+  font-family: var(--g-font);
+}
+
+.g-tile-meta {
+  overflow: hidden;
+  color: var(--g-muted);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.g-tile-code {
+  display: block;
+  overflow: hidden;
+  color: var(--g-muted);
+  font: 12px/18px var(--g-mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.g-tile-new {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.g-tile-note {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--g-muted);
+  font-size: 12px;
+  line-height: 16px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.g-adapt {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* What crosses each joint, beside its seam. */
+.g-joint {
+  position: absolute;
+  display: flex;
+  color: var(--g-text);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.g-joint[data-place="mid"] {
+  align-items: center;
+}
+
+.g-joint[data-place="above"] {
+  align-items: flex-end;
+}
+
+.g-joint[data-align="right"] {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.g-joint-text {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.g-diamond {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 8px 1px 1px;
+  background: var(--g-muted);
+  vertical-align: middle;
+  transform: rotate(45deg);
+  transition: background-color 120ms ease-out;
+}
+
+.g-joint[data-hover] .g-diamond {
+  background: var(--g-text);
+}
+
+.g-joint[data-lit] .g-diamond,
+.g-loose li[data-lit] .g-diamond {
+  background: var(--g-lit);
+}
+
+.g-loose {
+  margin-top: 12px;
+  color: var(--g-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.g-loose li[data-lit] {
+  color: var(--g-text);
+}
+
+.g-puzzle-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 16px;
+  color: var(--g-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-readout {
+  color: var(--g-text);
+  text-align: right;
+}
+
+.g-caption {
+  margin: 10px 2px 0;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+/* Steps: the current one is what the figure lights. */
+.g-steps {
+  display: grid;
+  gap: 2px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-steps button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--g-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.g-steps button:hover {
+  background: var(--g-hover);
+}
+
+.g-steps li[aria-current] button {
+  background: var(--g-fill);
+  color: var(--g-text);
+}
+
+.g-step-n {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--g-fill);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-steps li[aria-current] .g-step-n {
+  background: var(--g-lit-ink);
+  color: var(--g-sheet);
+}
+
+/* Assembling, once per answer: each tile drops into place, then the labels come in. */
+.g-stage[data-enter] .g-fill,
+.g-stage[data-enter] .g-edge,
+.g-stage[data-enter] .g-tile-slot {
+  animation: g-drop 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+
+.g-stage[data-enter] .g-joint,
+.g-stage[data-enter] .g-lit-edge,
+.g-stage[data-enter] .g-knob-lit {
+  animation: g-fade 160ms ease-out 200ms both;
+}
+
+@keyframes g-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes g-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g-stage[data-enter] * {
+    animation: none !important;
+  }
+
+  .g-fill,
+  .g-diamond {
+    transition: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .g-card {
+    padding: 12px 10px;
+  }
+}

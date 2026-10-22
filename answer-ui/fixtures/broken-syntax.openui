@@ -1,10 +1,10 @@
-root = Answer("The index and the tool list don't share a shape, so they need an adapter between them.", [f1, x1])
-p1 = Part("Skill writer", "a_part", "r1", "Writes the skill folder")
-p2 = Part("Skills index", "a_port", "r2", "Records each skill")
-p3 = Part("Tool list", "b_port", "r5", "What the agent reads")
-s1 = Step(1, "Hermes writes a skill.")
-s2 = Step(3, "It should reach the tool list.")
-m1 = Coupling([p1, p2, p3], [s1, s2])
-f1 = Fig("Two shapes, no adapter", m1, "The index and the tool list don't fit together yet.")
-this line is not a statement
-x1 = Snippet("r2:40-52", "Where Hermes records a skill"
+root = Answer("Hermes anota cada skill en su índice; un cargador nuevo la lleva al harness.", [z1, x1])
+p1 = Piece("write_skill", "r1:14", "function")
+p2 = Piece("SkillIndex.record", "r2:44", "method")
+p3 = Piece("TOOLS", "r5:12", "value")
+j1 = Joint(p1, p2, "SkillMeta")
+s1 = Step(p1, "Hermes escribe la skill.")
+s2 = Step(j1, "La anota en el índice.")
+z1 = Puzzle("Cómo llega una skill al harness", [p1, p2, p3], [j1], [s1, s2], "Un cargador une ambos lados.")
+Then the loader reads the index.
+x1 = Snippet("r2:44-56", "Donde se anota

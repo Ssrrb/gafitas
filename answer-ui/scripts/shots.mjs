@@ -1,5 +1,5 @@
-// Screenshots of the fixtures in headless Chrome: full pages at each width and theme, plus a 4× close-up of
-// every figure. Dev tool only (needs `npm run dev` or a static server on the build).
+// Screenshots of the fixtures in headless Chrome: full pages at each width and theme, plus a 2× close-up of
+// every figure card. thread:<name> draws a saved chat. Dev tool only (needs `npm run dev` or a static server on the build).
 //   node scripts/shots.mjs --url http://localhost:5199 --out /path/to/shots [--fixtures a,b] [--widths 1440,390]
 //        [--themes dark,light] [--query extra=1] [--no-zoom] [--steps 0,2]
 import puppeteer from "puppeteer-core";
@@ -14,7 +14,7 @@ const args = Object.fromEntries(
 );
 const url = args.url ?? "http://localhost:5199";
 const out = args.out ?? "shots";
-const fixtures = (args.fixtures ?? "hermes-coupling,middleware-conveyor,ingest-failing,slots-one,slots-max,broken-refs,broken-syntax").split(",");
+const fixtures = (args.fixtures ?? "requests-urllib3,hermes-puzzle,ingest-puzzle,hashmap-idea,puzzle-max,puzzle-min,broken-refs,thread:requests").split(",");
 const widths = (args.widths ?? "1440,390").split(",").map(Number);
 const themes = (args.themes ?? "dark,light").split(",");
 const steps = (args.steps ?? "0").split(",").map(Number);
@@ -39,7 +39,8 @@ try {
         page.on("pageerror", (e) => problems.push(`${fixture} ${theme} ${width}: ${e.message}`));
         await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: theme }]);
         await page.setViewport({ width, height: 900, deviceScaleFactor: 2 });
-        await page.goto(`${url}/?f=${fixture}&theme=${theme}&still=1${extra}`, { waitUntil: "networkidle0" });
+        const target = fixture.startsWith("thread:") ? `thread=${fixture.slice(7)}` : `f=${fixture}`;
+        await page.goto(`${url}/?${target}&theme=${theme}&still=1${extra}`, { waitUntil: "networkidle0" });
         await page.waitForSelector('html[data-ready="1"]', { timeout: 10000 });
         await new Promise((r) => setTimeout(r, 400));
         for (const step of steps) {
@@ -50,11 +51,11 @@ try {
             await new Promise((r) => setTimeout(r, 300));
           }
           const suffix = steps.length > 1 ? `-s${step}` : "";
-          await page.screenshot({ path: join(out, `${fixture}-${theme}-${width}${suffix}.png`), fullPage: true });
+          await page.screenshot({ path: join(out, `${fixture.replace(":", "-")}-${theme}-${width}${suffix}.png`), fullPage: true });
           if (zoom && width === widths[0]) {
-            const boxes = await page.$$eval(".g-machine", (list) => list.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height }; }));
+            const boxes = await page.$$eval(".g-card", (list) => list.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height }; }));
             for (let i = 0; i < boxes.length; i++) {
-              await page.screenshot({ path: join(out, `${fixture}-${theme}-fig${i + 1}-4x${suffix}.png`), clip: { ...boxes[i], scale: 2 } });
+              await page.screenshot({ path: join(out, `${fixture.replace(":", "-")}-${theme}-fig${i + 1}-2x${suffix}.png`), clip: { ...boxes[i], scale: 2 } });
             }
           }
         }

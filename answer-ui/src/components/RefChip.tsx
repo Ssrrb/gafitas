@@ -2,6 +2,7 @@ import * as React from "react";
 import { post } from "../post";
 import { rangeText, resolveRef, type ResolvedRef } from "../refs";
 import { useRefs, useSelected } from "../store";
+import { openAria } from "../strings";
 
 /** "repo/…/dir/file.py" when the full path would crowd the chip. */
 export function shortPath(repo: string, path: string) {
@@ -21,7 +22,7 @@ export function hoverRef(ref: ResolvedRef | null) {
 }
 
 /** A chip for one ref: tint dot, repo/path, line badge. Unknown refs render nothing (validation reports them). */
-export function RefChip({ cite, label, compact = false }: { cite: string; label?: string; compact?: boolean }) {
+export function RefChip({ cite, label }: { cite: string; label?: string }) {
   const refs = useRefs();
   const selected = useSelected();
   const resolved = resolveRef(cite, refs);
@@ -34,10 +35,9 @@ export function RefChip({ cite, label, compact = false }: { cite: string; label?
     <button
       type="button"
       className="g-chip"
-      data-compact={compact ? "" : undefined}
       data-selected={selected === entry.id ? "" : undefined}
       title={`${full} ${rangeText(ref.from, ref.to)}${entry.summary ? ` · ${entry.summary}` : ""}`}
-      aria-label={`Open ${full}, ${rangeText(ref.from, ref.to).replace("L", "line ").replace("–", " to ")}`}
+      aria-label={openAria(full, ref.from, ref.to)}
       onClick={(event) => {
         event.stopPropagation();
         openRef(ref);

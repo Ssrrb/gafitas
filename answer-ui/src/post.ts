@@ -4,7 +4,7 @@ export type Outgoing =
   | { type: "open"; ref: string; line: number | null }
   | { type: "hover"; ref: string | null }
   | { type: "adapt"; ref: string | null; path?: string }
-  | { type: "errors"; errors: { id: string; message: string }[]; final?: boolean };
+  | { type: "errors"; turn: string; errors: { id: string; message: string }[]; final?: boolean };
 
 interface Handler {
   postMessage(message: unknown): void;

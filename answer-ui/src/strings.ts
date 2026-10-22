@@ -1,0 +1,60 @@
+// Every fixed string a person reads or hears on the page. The model writes the rest (in Spanish, by rule).
+
+export const KINDS: Record<string, string> = {
+  function: "función",
+  method: "método",
+  class: "clase",
+  module: "módulo",
+  type: "tipo",
+  value: "valor",
+  file: "archivo",
+};
+
+const SPANISH_KINDS = new Set(Object.values(KINDS));
+
+/** The kind as shown: the model writes English ("method"); Spanish passes through; anything else is dropped. */
+export function kindLabel(kind: unknown): string {
+  const raw = typeof kind === "string" ? kind.trim().toLowerCase() : "";
+  if (KINDS[raw]) return KINDS[raw]!;
+  return SPANISH_KINDS.has(raw) ? raw : "";
+}
+
+export const S = {
+  title: "Respuesta de Gafitas",
+  puzzle: "rompecabezas",
+  pieces: "Piezas, en orden",
+  joints: "Uniones",
+  steps: "Pasos",
+  projects: "Proyectos",
+  newCode: "Código nuevo",
+  idea: "Idea",
+  isNew: "nuevo",
+  adapt: "Adaptar…",
+  hint: "← → recorre los pasos · clic en una pieza abre su código",
+  note: "Nota:",
+  watch: "Ojo:",
+  right: "Correcto.",
+  others: "Otros lugares encontrados",
+  partly: "Parte de esta respuesta no se pudo dibujar. Se muestra el resto.",
+  showProcess: "Ver el proceso",
+  hideProcess: "Ocultar el proceso",
+  thinking: "Lo que pensó Pi",
+  openCode: "Abrir el código",
+};
+
+export const stepOf = (n: number, count: number) => `paso ${n} de ${count}`;
+export const stepsCount = (count: number) => (count === 1 ? "1 paso" : `${count} pasos`);
+export const notQuite = (n: number) => `No exactamente: es la ${n}.`;
+export const morePlaces = (n: number) => `Ver ${n} más`;
+export const moreSteps = (n: number) => (n === 1 ? "y 1 paso más" : `y ${n} pasos más`);
+export const alsoJoint = (a: string, b: string, label: string) => `Además, ${a} → ${b}: ${label}`;
+export const adaptAria = (from: string, name: string) => (from ? `Adaptar ${from} para escribir ${name}` : `Preguntar cómo escribir ${name}`);
+
+/** "línea 784" or "líneas 696 a 709", for VoiceOver. */
+export const linesAria = (from: number, to: number) => (from === to ? `línea ${from}` : `líneas ${from} a ${to}`);
+/** "adapters.py:696–709", on a tile. */
+export const linesShort = (file: string, from: number, to: number) => `${file}:${from === to ? from : `${from}–${to}`}`;
+export const openAria = (path: string, from: number, to: number) => `Abrir ${path}, ${linesAria(from, to)}`;
+
+export const puzzleAria = (title: string, pieces: number, joints: number) =>
+  `${title}. ${pieces} ${pieces === 1 ? "pieza" : "piezas"} y ${joints} ${joints === 1 ? "unión" : "uniones"}. Las flechas recorren los pasos.`;

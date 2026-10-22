@@ -1,19 +1,11 @@
-// The small blocks: CodeRef, Snippet, Callout, Compare, NewCode, Check, Text.
+// The small blocks: Snippet, Callout, Compare, Check, Text.
 import * as React from "react";
-import { post } from "../post";
-import { linesOf, refIdOf, resolveRef } from "../refs";
+import { linesOf, resolveRef } from "../refs";
 import { useRefs, useSelected } from "../store";
+import { notQuite, S } from "../strings";
 import { hoverRef, openRef, RefChip } from "./RefChip";
 
 export const SNIPPET_LINES = 14;
-
-export function CodeRefBlock({ cite, label }: { cite: string; label?: string }) {
-  return (
-    <p className="g-coderef">
-      <RefChip cite={cite} label={label} />
-    </p>
-  );
-}
 
 export function SnippetBlock({ cite, note }: { cite: string; note?: string }) {
   const refs = useRefs();
@@ -65,7 +57,7 @@ export function CalloutBlock({ kind, text }: { kind: string; text: string }) {
   return (
     <aside className="g-callout" data-kind={watch ? "watch" : "note"}>
       <p>
-        <strong>{watch ? "Watch out:" : "Note:"}</strong> <Inline md={text} />
+        <strong>{watch ? S.watch : S.note}</strong> <Inline md={text} />
       </p>
     </aside>
   );
@@ -102,49 +94,6 @@ export function CompareBlock({ left, right }: { left?: SideProps; right?: SidePr
   );
 }
 
-export interface NewItemProps {
-  path?: string;
-  what?: string;
-  adapts?: string;
-}
-
-export function NewCodeBlock({ items }: { items: NewItemProps[] }) {
-  const refs = useRefs();
-  if (!items.length) return null;
-  return (
-    <section className="g-newcode" aria-label="New code">
-      <h2 className="g-section">New code</h2>
-      <ul>
-        {items.map((item, i) => {
-          const adapts = resolveRef(item.adapts, refs);
-          return (
-            <li key={i} className="g-newitem">
-              <div className="g-newitem-main">
-                <code className="g-path">{item.path}</code>
-                <span className="g-what">
-                  <Inline md={item.what ?? ""} />
-                </span>
-                {adapts.ok ? (
-                  <span className="g-adapts">
-                    <span className="g-from">from</span> <RefChip cite={item.adapts!} compact />
-                  </span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                className="g-button"
-                onClick={() => post({ type: "adapt", ref: adapts.ok ? adapts.ref.entry.id : refIdOf(item.adapts), path: item.path })}
-              >
-                Adapt…
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
 export function CheckBlock({ question, options, answer, why }: { question: string; options: string[]; answer: number; why: string }) {
   const [chosen, setChosen] = React.useState<number | null>(null);
   const right = Number(answer);
@@ -173,7 +122,7 @@ export function CheckBlock({ question, options, answer, why }: { question: strin
       <p className="g-why" aria-live="polite">
         {chosen === null ? null : (
           <>
-            <strong>{chosen === right ? "Right." : `Not quite: it's ${right}.`}</strong> <Inline md={why} />
+            <strong>{chosen === right ? S.right : notQuite(right)}</strong> <Inline md={why} />
           </>
         )}
       </p>

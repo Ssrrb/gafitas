@@ -15,21 +15,30 @@ describe("the system prompt", () => {
   });
 
   it("passes Gafitas's own validation: the refs example against its ref table, the concept example with none", () => {
-    expect(validateProgram(EXAMPLE_WITH_REFS, refsFor("hermes-coupling"))).toEqual([]);
+    expect(validateProgram(EXAMPLE_WITH_REFS, refsFor("requests-urllib3"))).toEqual([]);
     expect(validateProgram(EXAMPLE_CONCEPT, new Map())).toEqual([]);
   });
 
   it("matches the fixtures, so the examples are what the dev page shows", () => {
-    expect(fixture("hermes-coupling").trim()).toBe(EXAMPLE_WITH_REFS);
-    expect(fixture("middleware-conveyor").trim()).toBe(EXAMPLE_CONCEPT);
+    expect(fixture("requests-urllib3").trim()).toBe(EXAMPLE_WITH_REFS);
+    expect(fixture("hashmap-idea").trim()).toBe(EXAMPLE_CONCEPT);
   });
 
   it("lists every component signature and the rules", () => {
     const prompt = systemPrompt();
-    for (const signature of ["Answer(lede: string, blocks:", "Fig(title: string, machine: Coupling | Conveyor, caption: string)", "Part(label: string, role:", "Step(lit: number, text: string, value?: number, fails?: boolean)", "Snippet(ref: string, note?: string)", "NewItem(path: string, what: string, adapts: string)"]) {
+    for (const signature of [
+      "Answer(lede: string, blocks:",
+      "Puzzle(title: string, pieces: (Piece | NewPiece | Idea)[], joints: Joint[], steps: Step[], caption?: string)",
+      "Piece(name: string, ref: string, kind?: string)",
+      "NewPiece(name: string, project: string, path: string, from?: string, note?: string)",
+      "Joint(from: Piece | NewPiece | Idea, to: Piece | NewPiece | Idea, label: string)",
+      "Step(lit: Piece | NewPiece | Idea | Joint, text: string)",
+      "Snippet(ref: string, note?: string)",
+    ]) {
       expect(prompt).toContain(signature);
     }
     expect(prompt).toContain("Cite code only by the refs in the list");
+    expect(prompt).toContain("in Spanish");
     expect(prompt.length).toBeLessThan(14000);
   });
 });

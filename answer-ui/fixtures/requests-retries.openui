@@ -1,0 +1,8 @@
+root = Answer("Los reintentos los hace urllib3: HTTPAdapter.send le pasa sus max_retries a urlopen, y urlopen vuelve a intentar mientras queden.", [z1, t1])
+p1 = Piece("HTTPAdapter.send", "r2:696-709", "method")
+p2 = Piece("HTTPConnectionPool.urlopen", "r3:782", "method")
+j1 = Joint(p1, p2, "retries=self.max_retries")
+s1 = Step(j1, "HTTPAdapter.send pasa sus max_retries en la llamada a urlopen.")
+s2 = Step(p2, "urlopen captura el error de conexión y vuelve a intentar si quedan reintentos.")
+z1 = Puzzle("Quién reintenta", [p1, p2], [j1], [s1, s2], "requests solo configura los reintentos; urllib3 los hace.")
+t1 = Snippet("r2:696-709", "Aquí viajan los reintentos")

@@ -6,6 +6,7 @@ import { useRefs } from "../store";
 import { moreSteps, S } from "../strings";
 import type { Trail } from "../store";
 import type { RefEntry } from "../refs";
+import { Others } from "./Others";
 
 const SHOWN = 8;
 
@@ -69,7 +70,7 @@ function Places() {
   );
 }
 
-export function TrailView({ trail, live }: { trail: Trail; live: boolean }) {
+export function TrailView({ trail, live, program = "" }: { trail: Trail; live: boolean; program?: string }) {
   const [open, setOpen] = React.useState(false);
   const lines = trail.lines;
   if (!lines.length && !trail.summary) return null;
@@ -107,6 +108,7 @@ export function TrailView({ trail, live }: { trail: Trail; live: boolean }) {
           </div>
         </section>
       ) : null}
+      {open && program ? <Others program={program} /> : null}
       {open ? (
         <button type="button" className="g-link" aria-expanded="true" onClick={() => setOpen(false)}>
           {S.hideProcess}

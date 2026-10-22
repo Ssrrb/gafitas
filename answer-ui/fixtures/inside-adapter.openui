@@ -1,0 +1,6 @@
+root = Answer("HTTPAdapter.send traduce el timeout y le pasa todo a urlopen.", [k1, n1])
+l1 = Lines("r2:690-693", "convierte el timeout en un TimeoutSauce")
+l2 = Lines("r2:696-700", "llama a urlopen con la petición")
+l3 = Lines("r2:705-706", "pasa los reintentos y el timeout")
+k1 = Walkthrough("Dentro de HTTPAdapter.send", [l1, l2, l3])
+n1 = Next(["¿Qué hace urlopen con el timeout?", "¿Por qué redirect=False?"])

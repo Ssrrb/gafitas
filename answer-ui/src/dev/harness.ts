@@ -1,4 +1,4 @@
-// Dev page: ?f=<fixture>&theme=dark|light&still=1&repair=1&select=r2&chunk=24&live=1, or ?thread=requests.
+// Dev page: ?f=<fixture>&theme=dark|light&still=1&repair=1&select=r2&chunk=24&live=1&quiz=1, or ?thread=requests.
 // Plays a fixture through the same bridge Swift uses, streaming it in chunks so progressive rendering shows, with a
 // trail like the one Swift writes. live=1 stops before the answer, with Pi still at work; thread= draws a saved chat.
 import { api, applyTheme, type SavedTurn } from "../bridge";
@@ -24,6 +24,10 @@ const QUESTIONS: Record<string, string> = {
   "board-norefs": "¿Cómo añado reintentos a un cliente HTTP?",
   "repos-matches": "¿Qué hace requests y qué hace urllib3?",
   "broken-choices": "¿Dónde pongo los reintentos?",
+  "inside-adapter": "¿Cómo funciona «HTTPAdapter.send» por dentro?",
+  "quiz-urllib3": "Ponme a prueba.",
+  "live-https": "¿Y cómo lo monto solo para https?",
+  "live-ways": "¿Cómo hago que requests reintente con espera si falla la conexión?",
 };
 
 const working: Trail = {
@@ -83,7 +87,8 @@ export async function runFixture(params: URLSearchParams) {
   const text = await load();
   api.reset();
   api.refs(await refsFor(name));
-  api.turn("t1", QUESTIONS[name] ?? "");
+  // quiz=1: the turn was asked with «Ponme a prueba», as Swift marks it.
+  api.turn("t1", QUESTIONS[name] ?? "", params.get("quiz") === "1" ? { turn: "t0", block: "n1", choices: ["quiz"] } : undefined);
   api.trail("t1", working);
   if (params.get("live") === "1") {
     document.documentElement.dataset.ready = "1";

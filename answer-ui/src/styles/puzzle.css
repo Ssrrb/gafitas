@@ -23,7 +23,7 @@
 .g-puzzle-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 6px 16px;
   margin-bottom: 16px;
@@ -222,13 +222,27 @@ button.g-tile {
   text-overflow: ellipsis;
 }
 
+/* The tile's real lines: the hand-off line in full ink, the name it calls marked, the rest muted. */
 .g-tile-code {
   display: block;
-  overflow: hidden;
   color: var(--g-muted);
-  font: 12px/18px var(--g-mono);
-  white-space: nowrap;
+  font: 11.5px/16px var(--g-mono);
+}
+
+.g-tile-row {
+  display: block;
+  overflow: hidden;
+  white-space: pre;
   text-overflow: ellipsis;
+}
+
+.g-tile-row[data-main] {
+  color: var(--g-text);
+}
+
+.g-call {
+  color: var(--g-lit-ink);
+  font-weight: 600;
 }
 
 .g-tile-new {
@@ -339,60 +353,10 @@ button.g-tile {
   text-align: right;
 }
 
-.g-caption {
-  margin: 10px 2px 0;
-  color: var(--g-muted);
+.g-puzzle-head .g-readout {
   font-size: 13px;
-}
-
-/* Steps: the current one is what the figure lights. */
-.g-steps {
-  display: grid;
-  gap: 2px;
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.g-steps button {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--g-muted);
-  text-align: left;
-  cursor: pointer;
-}
-
-.g-steps button:hover {
-  background: var(--g-hover);
-}
-
-.g-steps li[aria-current] button {
-  background: var(--g-fill);
-  color: var(--g-text);
-}
-
-.g-step-n {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
-  border-radius: 999px;
-  background: var(--g-fill);
-  font-size: 11px;
+  line-height: 18px;
   font-variant-numeric: tabular-nums;
-}
-
-.g-steps li[aria-current] .g-step-n {
-  background: var(--g-lit-ink);
-  color: var(--g-sheet);
 }
 
 /* Assembling, once per answer: each tile drops into place, then the labels come in. */

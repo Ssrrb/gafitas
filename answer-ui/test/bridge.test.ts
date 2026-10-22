@@ -17,7 +17,8 @@ describe("bridge", () => {
     const turn = store.current();
     expect(turn.final).toBe(true);
     expect(turn.notice).toBe(true);
-    expect(turn.dropped.map((e) => e.id)).toEqual(["t1"]);
+    // Hard problems are dropped; the word budget only asks, it never takes anything off the page.
+    expect(turn.dropped.filter((e) => !(e as { soft?: boolean }).soft).map((e) => e.id)).toEqual(["t1"]);
     expect(turn.text).toContain('p2 = Piece("SkillIndex.record", "r2:44"');
     expect(turn.text).not.toContain("t1 =");
   });

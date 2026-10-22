@@ -2,6 +2,7 @@
 // indexes, and every problem with the statement id to fix. The component draws what's valid; validation reports
 // the problems to the model (in English: only the model reads them).
 import type { ElementNode } from "@openuidev/lang-core";
+import { tileRows, type TileRow } from "../curate";
 import { resolveRef, type RefEntry, type RefTable } from "../refs";
 import { kindLabel } from "../strings";
 
@@ -21,8 +22,9 @@ export interface PuzzlePiece {
   note: string;
   /** A Piece's ref, resolved: what it opens and the lines it shows. */
   ref?: { entry: RefEntry; from: number; to: number; line: number };
-  /** The real code at `ref.line`, trimmed. */
-  code: string;
+  /** The real lines the tile shows: where this piece hands work to the next (curate.ts), and the name it calls. */
+  rows: TileRow[];
+  call: string;
   /** A NewPiece: its proposed path and the ref it adapts. */
   path: string;
   adapts?: RefEntry;
@@ -96,7 +98,7 @@ export function readPuzzle(node: ElementNode, refs: RefTable): PuzzleModel {
     // Lengths are the prompt's guidance, not errors: the page clamps long words, and dropping a piece for its length
     // would break the picture more than a long name does.
     if (!name) add(id, `${type} needs a name.`);
-    const piece: PuzzlePiece = { id, type, name, band: "", tint: 0, kind: "", note: str(p.note), code: "", path: "" };
+    const piece: PuzzlePiece = { id, type, name, band: "", tint: 0, kind: "", note: str(p.note), rows: [], call: "", path: "" };
     if (type === "Piece" || type === "NewPiece") {
       if (!refs.size) add(id, `There are no refs, so every piece is an Idea(name, note), not a ${type}.`);
     }
@@ -111,8 +113,6 @@ export function readPuzzle(node: ElementNode, refs: RefTable): PuzzleModel {
         piece.ref = { entry, from, to, line };
         piece.band = entry.repo;
         piece.tint = ((entry.tint ?? 0) % 4) + 1;
-        const lines = entry.text.split("\n");
-        piece.code = (lines[line - entry.first] ?? "").trim() || entry.summary || "";
         piece.kind = kindLabel(p.kind) || kindFromCode(entry, name);
       }
     } else if (type === "NewPiece") {
@@ -195,6 +195,14 @@ export function readPuzzle(node: ElementNode, refs: RefTable): PuzzleModel {
   }
   const [fewest, mostSteps] = PUZZLE_LIMITS.steps;
   if (steps.length < fewest || steps.length > mostSteps) add(owner, `A Puzzle needs ${fewest} to ${mostSteps} Steps, not ${steps.length}.`);
+
+  // Each tile's lines, now that we know who it hands work to.
+  pieces.forEach((piece, i) => {
+    if (!piece.ref) return;
+    const joint = joints.find((j) => j.from === i);
+    const next = joint ? pieces[joint.to] : undefined;
+    Object.assign(piece, tileRows(piece.ref.entry, piece.ref, next && joint ? { name: next.name, label: joint.label } : undefined, piece.name));
+  });
 
   return { title: str(props.title), caption: str(props.caption), pieces, joints, steps, problems };
 }

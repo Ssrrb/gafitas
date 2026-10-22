@@ -69,11 +69,11 @@ fieldset.g-panel {
   font-weight: 600;
 }
 
-/* Caminos: one panel, the paths as columns split by rules, rows level across columns. */
+/* Caminos: one panel, the paths as columns split by rules. Each way is its own column of rows, clamped, with its
+ * action at the foot: no subgrid, which WebKit laid out at max-content and ran into the next column. */
 .g-ways-grid {
   display: grid;
   grid-template-columns: repeat(var(--g-cols, 3), minmax(0, 1fr));
-  grid-template-rows: repeat(6, auto);
   gap: 0;
 }
 
@@ -83,11 +83,10 @@ fieldset.g-panel {
 
 /* minmax(0, 1fr): without it, a long chip widens the way's own column past its share and its text runs into the next. */
 .g-way {
-  display: grid;
-  grid-row: span 6;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: subgrid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  min-width: 0;
   padding: 0 16px;
   border-left: 1px solid var(--g-edge);
 }
@@ -109,9 +108,17 @@ fieldset.g-panel {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
   font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.g-way-title > span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .g-way-title .g-icon {
@@ -125,11 +132,13 @@ fieldset.g-panel {
   line-height: 1.45;
 }
 
-.g-way-what {
+.g-way-what,
+.g-way-tradeoff {
   display: -webkit-box;
   overflow: hidden;
+  overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
 
 .g-way-label {
@@ -158,19 +167,16 @@ fieldset.g-panel {
 }
 
 .g-way-act {
-  align-self: end;
+  margin-top: auto;
   padding-top: 4px;
 }
 
 @container (max-width: 699px) {
   .g-ways[data-count="3"] .g-ways-grid {
     grid-template-columns: 1fr;
-    grid-template-rows: none;
   }
 
   .g-ways[data-count="3"] .g-way {
-    grid-row: auto;
-    grid-template-rows: none;
     padding: 14px 0;
     border-left: 0;
     border-top: 1px solid var(--g-edge);
@@ -185,12 +191,9 @@ fieldset.g-panel {
 @container (max-width: 459px) {
   .g-ways-grid {
     grid-template-columns: 1fr;
-    grid-template-rows: none;
   }
 
   .g-way {
-    grid-row: auto;
-    grid-template-rows: none;
     padding: 14px 0;
     border-left: 0;
     border-top: 1px solid var(--g-edge);
@@ -493,27 +496,32 @@ fieldset.g-panel {
 }
 
 /* Sigue con. */
+/* The next questions: one row of chips that wraps. */
 .g-next {
-  margin-top: 4px;
+  margin-top: 20px;
 }
 
 .g-next ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .g-next-q {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  width: 100%;
-  min-height: 32px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--g-edge);
+  border-radius: 999px;
+  background: var(--g-sheet);
+  color: var(--g-text);
+  font-size: 13px;
+  line-height: 18px;
   text-align: left;
   cursor: pointer;
 }
@@ -522,13 +530,13 @@ fieldset.g-panel {
   background: var(--g-hover);
 }
 
+.g-next-q:active {
+  transform: translateY(1px);
+}
+
 .g-next-q:focus-visible {
   outline: 2px solid var(--g-accent);
   outline-offset: 1px;
-}
-
-.g-next-q .g-icon {
-  transform: translateY(2px);
 }
 
 .g-next-q[data-asked] {
@@ -542,6 +550,22 @@ fieldset.g-panel {
 .g-next-q[aria-disabled="true"] {
   color: var(--g-muted);
   cursor: default;
+}
+
+/* A quiz: the lines that prove the answer, and how many were right at the first try. */
+.g-check-proof {
+  margin: 10px 0 0;
+}
+
+.g-check-proof figcaption {
+  margin-bottom: 6px;
+}
+
+.g-quiz-score {
+  margin: 16px 0 0;
+  color: var(--g-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Walkthrough. */
@@ -600,12 +624,6 @@ fieldset.g-panel {
   color: var(--g-text);
   font: 14px/1.45 var(--g-font);
   white-space: normal;
-}
-
-.g-stop-file {
-  margin: 8px 8px 2px;
-  color: var(--g-muted);
-  font-size: 12px;
 }
 
 .g-walk-ask {
@@ -674,9 +692,8 @@ fieldset.g-panel {
   font-weight: 600;
 }
 
-.g-side-points {
+.g-side-point {
   margin: 8px 0 0;
-  padding-left: 18px;
   font-size: 13px;
 }
 

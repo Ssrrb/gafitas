@@ -1,12 +1,11 @@
 import * as React from "react";
 import { Renderer, type OpenUIError } from "@openuidev/react-lang";
-import { Others } from "./components/Others";
 import { TrailView } from "./components/Trail";
 import { library } from "./library";
 import { post } from "./post";
 import { isStill } from "./still";
 import { S } from "./strings";
-import { PicksContext, RefsContext, SelectedContext, TurnContext, useThread, type Turn, type Via } from "./store";
+import { isQuiz, PicksContext, RefsContext, SelectedContext, TurnContext, useThread, type Turn, type Via } from "./store";
 import { validateProgram, type AnswerError } from "./validate";
 import type { RefTable } from "./refs";
 
@@ -21,7 +20,7 @@ function TurnView({ turn, chat, first, last, refs }: { turn: Turn; chat: number;
     let errors: AnswerError[];
     if (turn.final) errors = turn.dropped;
     else {
-      errors = validateProgram(turn.text, refs);
+      errors = validateProgram(turn.text, refs, { quiz: isQuiz(turn.via) });
       for (const error of renderErrors.current) {
         if (error.source !== "runtime") continue;
         errors.push({ id: error.statementId ?? error.component ?? "root", message: error.message });
@@ -31,7 +30,7 @@ function TurnView({ turn, chat, first, last, refs }: { turn: Turn; chat: number;
     if (key === lastPosted.current) return;
     lastPosted.current = key;
     post(turn.final ? { type: "errors", turn: turn.id, errors, final: true, program: turn.text } : { type: "errors", turn: turn.id, errors, program: turn.text });
-  }, [turn.phase, turn.text, turn.final, turn.dropped, turn.replay, turn.id, refs]);
+  }, [turn.phase, turn.text, turn.final, turn.dropped, turn.replay, turn.id, turn.via, refs]);
 
   // A follow-up brings its question to the top of the sheet; a reopened chat opens at its last turn. The view never
   // follows the stream after that, so it doesn't fight your scrolling.
@@ -43,11 +42,12 @@ function TurnView({ turn, chat, first, last, refs }: { turn: Turn; chat: number;
 
   const Heading = first ? "h1" : "h2";
   const live = turn.phase !== "done" && !turn.replay;
-  const context = React.useMemo(() => ({ key: `${chat}:${turn.id}`, id: turn.id, replay: turn.replay, live }), [chat, turn.id, turn.replay, live]);
+  const quiz = isQuiz(turn.via);
+  const context = React.useMemo(() => ({ key: `${chat}:${turn.id}`, id: turn.id, replay: turn.replay, live, quiz }), [chat, turn.id, turn.replay, live, quiz]);
   return (
     <section ref={section} className="g-turn" aria-label={turn.question || undefined}>
       {turn.question ? <Heading className="g-question">{turn.question}</Heading> : null}
-      <TrailView trail={turn.trail} live={turn.phase !== "done" && !turn.replay} />
+      <TrailView trail={turn.trail} live={turn.phase !== "done" && !turn.replay} program={turn.phase === "done" ? turn.text : ""} />
       <TurnContext.Provider value={context}>
         {turn.text ? (
           <Renderer
@@ -71,7 +71,6 @@ function TurnView({ turn, chat, first, last, refs }: { turn: Turn; chat: number;
           {S.partly}
         </p>
       ) : null}
-      {last && turn.phase === "done" ? <Others program={turn.text} /> : null}
     </section>
   );
 }

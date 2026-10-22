@@ -24,13 +24,11 @@ export const S = {
   puzzle: "rompecabezas",
   pieces: "Piezas, en orden",
   joints: "Uniones",
-  steps: "Pasos",
   projects: "Proyectos",
   newCode: "Código nuevo",
   idea: "Idea",
   isNew: "nuevo",
   adapt: "Adaptar…",
-  hint: "← → recorre los pasos · clic en una pieza abre su código",
   note: "Nota:",
   watch: "Ojo:",
   right: "Correcto.",
@@ -67,10 +65,10 @@ export const S = {
   of: "de",
   lines: "líneas",
   walkthrough: "recorrido",
-  walkHint: "← → recorre las paradas · clic en una línea abre el código",
+  prevStep: "Paso anterior",
+  nextStep: "Paso siguiente",
   prevStop: "Parada anterior",
   nextStop: "Parada siguiente",
-  stopsList: "Paradas",
   askLines: "Preguntar por estas líneas…",
   sureness: "Seguridad",
   noEquivalent: "sin equivalente en",
@@ -78,6 +76,8 @@ export const S = {
   howWould: "¿Cómo lo haría",
   explain: "Explícamelo",
   inside: "Ver por dentro",
+  quizMe: "Ponme a prueba",
+  quizMeMessage: "Ponme a prueba.",
   restsOn: (places: number, repos: string[]) =>
     `Se apoya en ${places === 1 ? "1 lugar" : `${places} lugares`} de tu código${repos.length ? `, en ${repos.join(" y ")}` : ""}.`,
 };
@@ -85,7 +85,12 @@ export const S = {
 export const stepOf = (n: number, count: number) => `paso ${n} de ${count}`;
 export const stepsCount = (count: number) => (count === 1 ? "1 paso" : `${count} pasos`);
 export const notQuite = (n: number) => `No exactamente: es la ${n}.`;
+/** After the last Check of a quiz: "2 de 3 a la primera". */
+export const quizScore = (right: number, of: number) => `${right} de ${of} a la primera`;
 export const morePlaces = (n: number) => `Ver ${n} más`;
+/** A fold in real code: "⋯ 6 líneas". */
+export const hiddenLines = (n: number) => `⋯ ${n} líneas`;
+export const showHidden = (n: number) => `Mostrar ${n} líneas ocultas`;
 export const moreSteps = (n: number) => (n === 1 ? "y 1 paso más" : `y ${n} pasos más`);
 export const alsoJoint = (a: string, b: string, label: string) => `Además, ${a} → ${b}: ${label}`;
 export const adaptAria = (from: string, name: string) => (from ? `Adaptar ${from} para escribir ${name}` : `Preguntar cómo escribir ${name}`);

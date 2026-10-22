@@ -11,7 +11,6 @@ import { KNOB_HALF, knobPath, knobSegment, tilePath } from "../puzzle/path";
 import { isStill } from "../still";
 import { TurnContext, usePicks, useRefs, useSelected } from "../store";
 import { adaptAria, alsoJoint, linesAria, linesShort, puzzleAria, S, stepOf, stepsCount } from "../strings";
-import { Inline } from "./blocks";
 
 /** Cut a line to what fits the tile (12px text: about 7.2px a character in SF Mono, 6.4 in SF), so nothing runs
  * past its tile even unclipped. */
@@ -19,6 +18,19 @@ const fit = (text: string, width: number, perChar: number) => {
   const max = Math.max(4, Math.floor(width / perChar));
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 };
+
+/** A code line with the name it calls marked: what crosses to the next piece starts there. */
+function Called({ text, call }: { text: string; call: string }) {
+  const at = call ? text.search(new RegExp(`(?<![\\w$])${call.replace(/[$]/g, "\\$")}\\s*\\(`)) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <b className="g-call">{call}</b>
+      {text.slice(at + call.length)}
+    </>
+  );
+}
 
 /** Turns whose figure already played its entrance: a repair remount or a reflow never replays it. */
 const entered = new Set<string>();
@@ -93,7 +105,7 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
   const L: Layout = React.useMemo(
     () =>
       layout(
-        pieces.map((p) => ({ band: p.band, name: p.name })),
+        pieces.map((p) => ({ band: p.band, name: p.name, rows: p.rows.length || 1 })),
         joints.map((j) => ({ from: j.from, to: j.to })),
         width,
       ),
@@ -130,7 +142,7 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
     ? hovered.ref
       ? `${hovered.ref.entry.repo}/${hovered.ref.entry.path} · ${linesAria(hovered.ref.from, hovered.ref.to)}`
       : hovered.path
-    : [shownStep >= 0 ? stepOf(shownStep + 1, count) : count ? stepsCount(count) : "", describe(lit)].filter(Boolean).join(" · ");
+    : [shownStep >= 0 ? stepOf(shownStep + 1, count) : count ? stepsCount(count) : "", (shownStep >= 0 ? steps[shownStep]!.text : "") || describe(lit)].filter(Boolean).join(" · ");
 
   const bands = L.bands.filter(Boolean);
   const tintOfBand = (band: string) => pieces.find((p) => p.band === band && p.tint)?.tint ?? 0;
@@ -156,26 +168,19 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
       >
         <header className="g-puzzle-head">
           <span className="g-puzzle-title">{model.title}</span>
-          <ul className="g-legend" aria-label={S.projects}>
-            {bands.map((band) => (
-              <li key={band}>
-                <span className="g-swatch" data-tint={tintOfBand(band)} aria-hidden="true" />
-                {band}
-              </li>
-            ))}
-            {hasNew ? (
-              <li>
-                <span className="g-swatch" data-type="new" aria-hidden="true" />
-                {S.newCode}
-              </li>
-            ) : null}
-            {hasIdea ? (
-              <li>
-                <span className="g-swatch" data-type="idea" aria-hidden="true" />
-                {S.idea}
-              </li>
-            ) : null}
-          </ul>
+          {count ? (
+            <span className="g-walk-nav">
+              <span className="g-readout" aria-live="polite">
+                {readout}
+              </span>
+              <button type="button" className="g-button g-step-button" aria-label={S.prevStep} onClick={() => go(current - 1)}>
+                ‹
+              </button>
+              <button type="button" className="g-button g-step-button" aria-label={S.nextStep} onClick={() => go(current + 1)}>
+                ›
+              </button>
+            </span>
+          ) : null}
         </header>
 
         <div ref={stage} className="g-stage" data-enter={enter ? "" : undefined} style={{ height: L.height }}>
@@ -250,7 +255,15 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
                         <CodeName name={piece.name} />
                       </code>
                       <span className="g-tile-meta">{fit([ref ? linesShort(basename(ref.entry.path), ref.from, ref.to) : "", piece.kind].filter(Boolean).join(" · "), tile.w - 28, 6.4)}</span>
-                      {piece.code ? <code className="g-tile-code">{fit(piece.code, tile.w - 28, 7.3)}</code> : null}
+                      {piece.rows.length ? (
+                        <code className="g-tile-code">
+                          {piece.rows.map((row, r) => (
+                            <span key={r} className="g-tile-row" data-main={row.main ? "" : undefined}>
+                              <Called text={fit(row.text, tile.w - 28, 6.9)} call={row.main ? piece.call : ""} />
+                            </span>
+                          ))}
+                        </code>
+                      ) : null}
                     </button>
                   ) : piece.type === "NewPiece" ? (
                     <div className="g-tile" data-type="new" {...events}>
@@ -330,56 +343,53 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
         ) : null}
 
         <footer className="g-puzzle-foot">
-          <span className="g-hint">{S.hint}</span>
-          <span className="g-walk-nav">
-            <span className="g-readout" aria-live="polite">
-              {readout}
-            </span>
-            {(() => {
-              // The lit or hovered piece, from inside: Pi answers with a walk through its lines.
-              const piece = hover !== null ? pieces[hover] : litPiece >= 0 ? pieces[litPiece] : undefined;
-              if (!piece?.ref || busy || turn.live) return null;
-              return (
-                <button
-                  type="button"
-                  className="g-link"
-                  onClick={() =>
-                    void trigger(`¿Cómo funciona «${piece.name}» por dentro?`, undefined, {
-                      type: "continue_conversation",
-                      params: { kind: "puzzle", block, choices: [piece.id], note: `The user asked to look inside ${piece.id} «${piece.name}» of your Puzzle ${block} in ${turn.id}.` },
-                    })
-                  }
-                >
-                  {S.inside} ›
-                </button>
-              );
-            })()}
-          </span>
+          <ul className="g-legend" aria-label={S.projects}>
+            {bands.map((band) => (
+              <li key={band}>
+                <span className="g-swatch" data-tint={tintOfBand(band)} aria-hidden="true" />
+                {band}
+              </li>
+            ))}
+            {hasNew ? (
+              <li>
+                <span className="g-swatch" data-type="new" aria-hidden="true" />
+                {S.newCode}
+              </li>
+            ) : null}
+            {hasIdea ? (
+              <li>
+                <span className="g-swatch" data-type="idea" aria-hidden="true" />
+                {S.idea}
+              </li>
+            ) : null}
+          </ul>
+          {(() => {
+            // The lit or hovered piece, from inside: Pi answers with a walk through its lines.
+            const piece = hover !== null ? pieces[hover] : litPiece >= 0 ? pieces[litPiece] : undefined;
+            if (!piece?.ref || busy || turn.live) return null;
+            return (
+              <button
+                type="button"
+                className="g-link"
+                onClick={() =>
+                  void trigger(`¿Cómo funciona «${piece.name}» por dentro?`, undefined, {
+                    type: "continue_conversation",
+                    params: {
+                      kind: "puzzle",
+                      block,
+                      choices: [piece.id],
+                      note: `The user asked to look inside ${piece.id} «${piece.name}» of your Puzzle ${block} in ${turn.id}. Answer with a Walkthrough of its lines.`,
+                    },
+                  })
+                }
+              >
+                {S.inside} ›
+              </button>
+            );
+          })()}
         </footer>
       </div>
 
-      {model.caption ? (
-        <figcaption className="g-caption">
-          <Inline md={model.caption} />
-        </figcaption>
-      ) : null}
-
-      {count ? (
-        <ol className="g-steps" aria-label={S.steps}>
-          {steps.map((s, i) => (
-            <li key={s.id} aria-current={i === shownStep ? "step" : undefined}>
-              <button type="button" onClick={() => go(i)}>
-                <span className="g-step-n" aria-hidden="true">
-                  {i + 1}
-                </span>
-                <span className="g-step-text">
-                  <Inline md={s.text} />
-                </span>
-              </button>
-            </li>
-          ))}
-        </ol>
-      ) : null}
     </figure>
   );
 }

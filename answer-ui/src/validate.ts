@@ -3,7 +3,7 @@
 // ref check (the anti-hallucination rule) and the Puzzle's rules on top of the parser's own errors. The
 // messages go only to the model, in the repair turn, so they're English like the rest of its prompt.
 import { createParser, mergeStatements, type ElementNode } from "@openuidev/lang-core";
-import { BIG_BLOCKS, BLOCKS, CHOICE_BLOCKS, LIMITS, MAX_BIG, library, ROOT } from "./library";
+import { BLOCKS, library, ROOT } from "./library";
 import { sureOf } from "./components/Learn";
 import { readPuzzle } from "./puzzle/model";
 import { columnOf, effortOf } from "./components/Choices";
@@ -77,7 +77,67 @@ const words = (rhs: string) => {
 
 const isElement = (value: unknown): value is ElementNode => Boolean(value && typeof value === "object" && (value as ElementNode).type === "element");
 
-export function validateProgram(text: string, refs: RefTable): AnswerError[] {
+/** What the model writes for a person to read, by component: the words budget counts these. Names, refs, icons and
+ * joint labels (what crosses, as the code names it) don't count. */
+const PROSE: Record<string, string[]> = {
+  Answer: ["lede"],
+  Ways: ["question"],
+  Way: ["title", "what", "tradeoff"],
+  Pick: ["question"],
+  Option: ["label", "note"],
+  Board: ["title"],
+  Item: ["title", "note"],
+  Puzzle: ["title", "caption"],
+  NewPiece: ["note"],
+  Idea: ["note"],
+  Step: ["text"],
+  Matches: ["title"],
+  Match: ["note"],
+  Walkthrough: ["title"],
+  Lines: ["text"],
+  SideBySide: ["title", "note"],
+  Side: ["points"],
+  Snippet: ["note"],
+  Callout: ["text"],
+  Text: ["md"],
+  Next: ["questions"],
+};
+/** Words per answer: what it aims for, and past which the repair turn asks for fewer. */
+export const WORDS = { lede: 18, answer: 100 } as const;
+const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
+const DOTTED = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
+/** Code retyped in prose: a `span` or a call with arguments that holds ( = " [ {, or runs past 32 characters. */
+function retyped(text: string) {
+  for (const match of text.matchAll(/`([^`]+)`/g)) if (/[(="[{]/.test(match[1]!) || match[1]!.length > 32) return match[1]!;
+  return /[A-Za-z_$][\w$.]*\([^)\s][^)]*\)/.exec(text.replace(/`[^`]*`/g, ""))?.[0] ?? null;
+}
+
+/** The prose an answer puts on screen, and its statements', by id. Checks (a quiz) aren't counted. */
+export function measure(text: string) {
+  const root = parseProgram(text).root;
+  const byId = new Map<string, number>();
+  const strings: { id: string; text: string }[] = [];
+  const seen = new Set<unknown>();
+  const visit = (value: unknown, owner: string) => {
+    if (Array.isArray(value)) return value.forEach((v) => visit(v, owner));
+    if (!isElement(value) || seen.has(value)) return;
+    seen.add(value);
+    const id = value.statementId ?? owner;
+    for (const field of PROSE[value.typeName] ?? []) {
+      const v = value.props[field];
+      for (const t of Array.isArray(v) ? v : [v]) {
+        if (typeof t !== "string" || !t.trim()) continue;
+        strings.push({ id, text: t });
+        byId.set(id, (byId.get(id) ?? 0) + wordCount(t));
+      }
+    }
+    for (const v of Object.values(value.props)) visit(v, id);
+  };
+  visit(root, "root");
+  return { words: [...byId.values()].reduce((a, b) => a + b, 0), byId, strings };
+}
+
+export function validateProgram(text: string, refs: RefTable, opts: { quiz?: boolean } = {}): AnswerError[] {
   const errors: AnswerError[] = [];
   const add = (id: string | undefined, message: string) => {
     const key = `${id ?? "root"}|${message}`;
@@ -128,7 +188,8 @@ export function validateProgram(text: string, refs: RefTable): AnswerError[] {
   };
 
   const blocks = Array.isArray(root.props.blocks) ? root.props.blocks : [];
-  const seen: Record<string, number> = {};
+  // Blocks over their limits are left out of the drawing (library.tsx drawnBlocks), not sent back: a repair turn for
+  // something the page already handles only costs time.
   for (const block of blocks) {
     if (!isElement(block)) continue;
     const id = block.statementId ?? "root";
@@ -137,24 +198,36 @@ export function validateProgram(text: string, refs: RefTable): AnswerError[] {
       add(id, `${type} can't be a block of the Answer (use ${BLOCKS.join(", ")}).`);
       continue;
     }
-    seen[type] = (seen[type] ?? 0) + 1;
-    const limit = LIMITS[type as keyof typeof LIMITS];
-    if (limit && seen[type]! > limit) add(id, `At most ${limit} ${type}${limit > 1 ? "s" : ""}; this one is not shown.`);
-    else if ((CHOICE_BLOCKS as readonly string[]).includes(type) && CHOICE_BLOCKS.some((other) => other !== type && seen[other])) {
-      add(id, "At most one of Ways, Pick and Board in an answer; this one is not shown.");
-    } else if ((BIG_BLOCKS as readonly string[]).includes(type) && BIG_BLOCKS.reduce((n, big) => n + (seen[big] ?? 0), 0) > MAX_BIG) {
-      add(id, `At most ${MAX_BIG} of ${BIG_BLOCKS.join(", ")} in an answer; this one is not shown.`);
-    }
     checkBlock(block, id);
+  }
+
+  // Few words: what the page can't cut without losing meaning goes back once, drawn as it is meanwhile.
+  const lede = typeof root.props.lede === "string" ? root.props.lede : "";
+  if (wordCount(lede) > WORDS.lede) addSoft("root", `The lede has ${wordCount(lede)} words; answer in one line of at most 12.`);
+  const prose = measure(text);
+  if (prose.words > WORDS.answer) addSoft("root", `The answer has ${prose.words} words for the user to read; keep it under ${WORDS.answer}: one block, short steps and notes, each fact once.`);
+  for (const { id, text: t } of prose.strings) {
+    const code = retyped(t);
+    if (code) addSoft(id, `${id} retypes code ("${code.slice(0, 40)}"); cite its ref instead, so Gafitas shows the real lines.`);
+  }
+  if (opts.quiz && !blocks.some((block) => isElement(block) && block.typeName === "Check")) {
+    addSoft("root", "The user asked «Ponme a prueba»: answer with 2 or 3 Check(question, options, answer, why, ref).");
   }
 
   function checkBlock(node: ElementNode, owner: string) {
     const id = node.statementId ?? owner;
     const p = node.props;
     switch (node.typeName) {
-      case "Puzzle":
+      case "Puzzle": {
         for (const problem of readPuzzle(node, refs).problems) add(problem.id, problem.message);
+        for (const piece of (Array.isArray(p.pieces) ? p.pieces : []).filter(isElement)) {
+          const name = typeof piece.props.name === "string" ? piece.props.name.trim() : "";
+          if ((piece.typeName === "Piece" || piece.typeName === "NewPiece") && name && !DOTTED.test(name)) {
+            addSoft(piece.statementId ?? id, `${piece.statementId ?? id} is named "${name.slice(0, 40)}"; name it as the function, method or class, like "TimedAdapter.send", never a line of code.`);
+          }
+        }
         break;
+      }
       case "Snippet":
         refCheck(id, "Snippet", p.ref);
         break;

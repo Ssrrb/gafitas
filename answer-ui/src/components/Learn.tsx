@@ -5,12 +5,14 @@ import * as React from "react";
 import { useTriggerAction } from "@openuidev/react-lang";
 import { CircleHelp } from "lucide-react";
 import { post } from "../post";
-import { linesOf, resolveRef, type RefEntry, type ResolvedRef } from "../refs";
+import { codeRows, enclosingDef, litLines, rowsOf, type CodeRow } from "../curate";
+import { linesOf, resolveRef, type RefEntry, type RefTable, type ResolvedRef } from "../refs";
 import { TurnContext, usePicks, useRefs } from "../store";
 import { S } from "../strings";
 import { Inline } from "./blocks";
 import { placeName } from "./Trail";
-import { hoverRef, openRef, RefChip } from "./RefChip";
+import { CodeLines } from "./Code";
+import { RefChip } from "./RefChip";
 
 interface Node {
   typeName?: string;
@@ -36,43 +38,17 @@ function useSend() {
   return (message: string, params: Record<string, unknown>) => void trigger(message, undefined, { type: "continue_conversation", params });
 }
 
-/** A run of a ref's real lines, `lit` from–to, each line opening the code; `after(n)` adds a row under line n. */
-function CodeView({ entry, first, last, lit, badges, after }: { entry: RefEntry; first: number; last: number; lit?: [number, number]; badges?: Map<number, number>; after?: (n: number) => React.ReactNode }) {
-  const lines = linesOf(entry).filter((line) => line.n >= first && line.n <= last);
-  const width = String(last).length;
-  const asRef: ResolvedRef = { entry, from: first, to: last, line: lit?.[0] ?? first, single: false };
-  return (
-    <pre className="g-code g-code-learn" style={{ "--g-gutter": `${width + 1}ch` } as React.CSSProperties}>
-      <code>
-        {lines.map((line) => {
-          const on = lit && line.n >= lit[0] && line.n <= lit[1];
-          const badge = badges?.get(line.n);
-          return (
-            <React.Fragment key={line.n}>
-              <span
-                className="g-line"
-                data-focus={on ? "" : undefined}
-                onClick={() => openRef(asRef, line.n)}
-                onPointerEnter={() => hoverRef(asRef)}
-                onPointerLeave={() => hoverRef(null)}
-              >
-                <span className="g-ln" aria-hidden="true">
-                  {badge ? <span className="g-stop-badge" data-current={on ? "" : undefined}>{badge}</span> : null}
-                  {line.n}
-                </span>
-                <span className="g-lt">{line.text || " "}</span>
-                {"\n"}
-              </span>
-              {after?.(line.n)}
-            </React.Fragment>
-          );
-        })}
-      </code>
-    </pre>
-  );
+/** The rows of a Walkthrough with stop `current` open: its lines (the long ones cut to head and tail), the other stops
+ * of the same ref folded to their first line, the def they sit in on top. */
+function walkRows(entry: RefEntry, stops: { ref: ResolvedRef }[], current: number) {
+  const mine = stops.map((s, i) => ({ ...s, i })).filter((s) => s.ref.entry.id === entry.id);
+  const open = stops[current]!.ref;
+  const show = litLines(open.from, open.to);
+  for (const s of mine) show.add(s.ref.from);
+  const def = enclosingDef(linesOf(entry), Math.min(...mine.map((s) => s.ref.from)));
+  if (def !== null) show.add(def);
+  return rowsOf(entry, show, (n) => n >= open.from && n <= open.to);
 }
-
-const WINDOW = 22;
 
 export function WalkthroughBlock({ props }: { props: Record<string, unknown> }) {
   const refs = useRefs();
@@ -87,18 +63,14 @@ export function WalkthroughBlock({ props }: { props: Record<string, unknown> }) 
   const current = Math.min(at, stops.length - 1);
   const stop = stops[current]!;
   const entry = stop.ref.entry;
-  const mine = stops.filter((s) => s.ref.entry.id === entry.id);
-  // The stops of this ref, two lines of context, at most WINDOW lines around the current stop.
-  let first = Math.max(entry.first, Math.min(...mine.map((s) => s.ref.from)) - 2);
-  let last = Math.min(entry.last, Math.max(...mine.map((s) => s.ref.to)) + 2);
-  if (last - first + 1 > WINDOW) {
-    first = Math.max(entry.first, Math.min(stop.ref.from - 4, stop.ref.to + 4 - WINDOW + 1));
-    last = Math.min(entry.last, first + WINDOW - 1);
-  }
-  const badges = new Map(stops.flatMap((s, i) => (s.ref.entry.id === entry.id ? [[s.ref.from, i + 1] as const] : [])));
+  const rows = walkRows(entry, stops, current);
+  // The card keeps the height of its tallest stop, so stepping never moves what's below.
+  const tallest = Math.max(...stops.map((_, i) => walkRows(stops[i]!.ref.entry, stops, i).length));
+  const lastLit = Math.max(...rows.flatMap((row) => (row.kind === "line" && row.lit ? [row.n] : [])));
+  const badges = new Map(stops.flatMap((s, i) => (s.ref.entry.id === entry.id ? [[s.ref.from, { n: i + 1, current: i === current }] as const] : [])));
   const go = (to: number) => setAt(((to % stops.length) + stops.length) % stops.length);
   const title = str(props.title);
-  const readout = `${S.stop} ${current + 1} ${S.of} ${stops.length} · ${S.lines} ${span(stop.ref.from, stop.ref.to)}`;
+  const readout = `${S.stop} ${current + 1} ${S.of} ${stops.length}`;
   return (
     <figure className="g-puzzle g-walk">
       <div
@@ -118,26 +90,8 @@ export function WalkthroughBlock({ props }: { props: Record<string, unknown> }) 
       >
         <header className="g-puzzle-head">
           <span className="g-puzzle-title">{title}</span>
-          <RefChip cite={`${entry.id}:${entry.first}-${entry.last}`} />
-        </header>
-        <CodeView
-          entry={entry}
-          first={first}
-          last={last}
-          lit={[stop.ref.from, stop.ref.to]}
-          badges={badges}
-          after={(n) =>
-            n === Math.min(stop.ref.to, last) ? (
-              <span className="g-stop-say">
-                {current + 1} {S.of} {stops.length} · <Inline md={stop.text} />
-                {"\n"}
-              </span>
-            ) : null
-          }
-        />
-        <footer className="g-puzzle-foot">
-          <span className="g-hint">{S.walkHint}</span>
           <span className="g-walk-nav">
+            <RefChip cite={`${entry.id}:${stop.ref.from}-${stop.ref.to}`} label={fileOf(entry)} />
             <span className="g-readout" aria-live="polite">
               {readout}
             </span>
@@ -148,25 +102,31 @@ export function WalkthroughBlock({ props }: { props: Record<string, unknown> }) 
               ›
             </button>
           </span>
-        </footer>
+        </header>
+        <CodeLines
+          key={current}
+          entry={entry}
+          rows={rows}
+          className="g-code-learn"
+          badges={badges}
+          style={{ minHeight: `calc(${tallest} * 1.6em + 16px + 3em)` }}
+          onLine={(n) => {
+            // A folded stop's line opens that stop; any other line opens the code.
+            const other = stops.findIndex((s, i) => i !== current && s.ref.entry.id === entry.id && s.ref.from === n);
+            if (other < 0) return false;
+            go(other);
+            return true;
+          }}
+          after={(n) =>
+            n === lastLit && stop.text ? (
+              <span className="g-stop-say">
+                <Inline md={stop.text} />
+                {"\n"}
+              </span>
+            ) : null
+          }
+        />
       </div>
-      <ol className="g-steps" aria-label={S.stopsList}>
-        {stops.map((s, i) => (
-          <li key={`${s.id}-${i}`} aria-current={i === current ? "step" : undefined}>
-            {i === 0 || stops[i - 1]!.ref.entry.id !== s.ref.entry.id ? (
-              stops.some((o) => o.ref.entry.id !== stops[0]!.ref.entry.id) ? <p className="g-stop-file">{fileOf(s.ref.entry)}</p> : null
-            ) : null}
-            <button type="button" onClick={() => go(i)}>
-              <span className="g-step-n" aria-hidden="true">
-                {i + 1}
-              </span>
-              <span className="g-step-text">
-                <Inline md={s.text} />
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
       <button
         type="button"
         className="g-link g-walk-ask"
@@ -184,20 +144,19 @@ export interface SideProps {
   points?: string[];
 }
 
-const CONTEXT = 3;
-const SIDE_LINES = 14;
+/** At most this many rows a side; the shorter side takes more context until both match. */
+const SIDE_ROWS = 8;
 
-function SidePane({ side }: { side: SideProps }) {
+function sideRows(side: SideProps | undefined, refs: RefTable, context: number) {
+  const r = resolveRef(side?.ref, refs);
+  return r.ok ? codeRows(r.ref.entry, r.ref.from, r.ref.to, r.ref.line, context) : null;
+}
+
+function SidePane({ side, rows }: { side: SideProps; rows: CodeRow[] | null }) {
   const refs = useRefs();
   const r = resolveRef(side.ref, refs);
-  if (!r.ok) return <section className="g-side" />;
+  if (!r.ok || !rows) return <section className="g-side" />;
   const { entry } = r.ref;
-  // A whole ref lights its focus line; a range lights itself. A few lines of real context around it, at most 14.
-  const lit: [number, number] = r.ref.from === entry.first && r.ref.to === entry.last ? [r.ref.line, r.ref.line] : [r.ref.from, r.ref.to];
-  let first = Math.max(entry.first, lit[0] - CONTEXT);
-  let last = Math.min(entry.last, lit[1] + CONTEXT);
-  if (last - first + 1 > SIDE_LINES) last = first + SIDE_LINES - 1;
-  if (last - first + 1 < SIDE_LINES) first = Math.max(entry.first, last - SIDE_LINES + 1);
   return (
     <section className="g-side" aria-label={side.title}>
       <p className="g-side-repo">
@@ -207,22 +166,28 @@ function SidePane({ side }: { side: SideProps }) {
       <h3 className="g-side-title">
         <code>{side.title}</code> <RefChip cite={side.ref ?? ""} label={fileOf(entry)} />
       </h3>
-      <CodeView entry={entry} first={first} last={last} lit={lit} />
+      <CodeLines entry={entry} rows={rows} />
+      {/* Older chats wrote points; one at most, the code says the rest. */}
       {side.points?.length ? (
-        <ul className="g-side-points">
-          {side.points.slice(0, 4).map((point, i) => (
-            <li key={i}>
-              <Inline md={point} />
-            </li>
-          ))}
-        </ul>
+        <p className="g-side-point">
+          <Inline md={side.points[0]!} />
+        </p>
       ) : null}
     </section>
   );
 }
 
 export function SideBySideBlock({ title, left, right, note }: { title?: string; left?: SideProps; right?: SideProps; note?: string }) {
+  const refs = useRefs();
   if (!left || !right) return null;
+  let l = sideRows(left, refs, 1);
+  let r = sideRows(right, refs, 1);
+  // Even the panes: the shorter side shows a little more of its own context.
+  for (let context = 2; l && r && l.length !== r.length && context <= 6; context++) {
+    if (l.length < r.length && l.length < SIDE_ROWS) l = sideRows(left, refs, context);
+    else if (r.length < l.length && r.length < SIDE_ROWS) r = sideRows(right, refs, context);
+    else break;
+  }
   return (
     <figure className="g-sxs">
       <div className="g-card">
@@ -232,8 +197,8 @@ export function SideBySideBlock({ title, left, right, note }: { title?: string; 
           </header>
         ) : null}
         <div className="g-sxs-grid">
-          <SidePane side={left} />
-          <SidePane side={right} />
+          <SidePane side={left} rows={l} />
+          <SidePane side={right} rows={r} />
         </div>
       </div>
       {note ? (

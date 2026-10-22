@@ -5,11 +5,13 @@ import "./zod-setup";
 import * as React from "react";
 import { createLibrary, defineComponent, useRenderNode } from "@openuidev/react-lang";
 import { z } from "zod/v4";
-import { CalloutBlock, CheckBlock, Inline, SnippetBlock, TextBlock } from "./components/blocks";
+import { CalloutBlock, CheckBlock, Inline, QuizContext, SnippetBlock, TextBlock } from "./components/blocks";
 import { MatchesBlock, SideBySideBlock, WalkthroughBlock, type SideProps } from "./components/Learn";
 import { PuzzleBlock } from "./components/Puzzle";
 import { BoardBlock, NextBlock, PickBlock, WaysBlock } from "./components/Choices";
 import { ICON_NAMES } from "./icons";
+import { TurnContext } from "./store";
+import { quizScore } from "./strings";
 
 export const ROOT = "Answer";
 
@@ -17,21 +19,21 @@ const nothing = () => null;
 
 export const Piece = defineComponent({
   name: "Piece",
-  description: 'Code that exists. name: as in the code ("HTTPAdapter.send"). ref: its ref. kind: function, method, class, module, type, value or file.',
+  description: 'Code that exists. name: as in the code ("HTTPAdapter.send"). kind: function, method, class, module, type, value or file.',
   props: z.object({ name: z.string(), ref: z.string(), kind: z.string().optional() }),
   component: nothing,
 });
 
 export const NewPiece = defineComponent({
   name: "NewPiece",
-  description: 'Code still to write, an empty tile in the gap. project: its repo, as in the list. path: a proposed file. from: the ref it adapts, or "". note: at most 8 words.',
+  description: 'Code still to write. name: the function or class ("TimedAdapter.send"), never a line of code. project: its repo. path: a proposed file. from: the ref it adapts, or "". note: at most 8 words.',
   props: z.object({ name: z.string(), project: z.string(), path: z.string(), from: z.string().optional(), note: z.string().optional() }),
   component: nothing,
 });
 
 export const Idea = defineComponent({
   name: "Idea",
-  description: "A piece of a concept, with no code (when there are no refs). note: at most 8 words.",
+  description: "A piece of a concept, when there are no refs. note: at most 6 words.",
   props: z.object({ name: z.string(), note: z.string().optional() }),
   component: nothing,
 });
@@ -40,21 +42,21 @@ const pieceRef = () => z.union([Piece.ref, NewPiece.ref, Idea.ref]);
 
 export const Joint = defineComponent({
   name: "Joint",
-  description: "Where two pieces fit: from gives, to receives (ids like p1). label: what crosses, at most 40 characters.",
+  description: "Where two pieces fit: from gives, to receives (ids like p1). label: what crosses, as the code names it, at most 40 characters.",
   props: z.object({ from: pieceRef(), to: pieceRef(), label: z.string() }),
   component: nothing,
 });
 
 export const Step = defineComponent({
   name: "Step",
-  description: "One moment, in order. lit: the id of the piece or joint it lights. text: at most 20 words.",
+  description: "One moment, in order. lit: a piece or joint id. text: at most 6 words, verb first.",
   props: z.object({ lit: z.union([Piece.ref, NewPiece.ref, Idea.ref, Joint.ref]), text: z.string() }),
   component: nothing,
 });
 
 export const Puzzle = defineComponent({
   name: "Puzzle",
-  description: "Real units of code as jigsaw pieces; joints are where one hands work to the next. title: at most 8 words. caption: one true sentence.",
+  description: "Real code as jigsaw pieces; joints are where one hands work to the next. title: at most 6 words.",
   props: z.object({
     title: z.string(),
     pieces: z.array(pieceRef()),
@@ -67,70 +69,71 @@ export const Puzzle = defineComponent({
 
 export const Way = defineComponent({
   name: "Way",
-  description: 'One way to go. title: at most 6 words. icon: a name from the icon list. what: one sentence. effort: "bajo", "medio" or "alto". tradeoff: one sentence. uses: the refs it reuses.',
+  description: 'title: at most 5 words. what: at most 12 words. effort: "bajo", "medio" or "alto". tradeoff: at most 8 words. uses: the refs it reuses.',
   props: z.object({ title: z.string(), icon: z.string(), what: z.string(), effort: z.string(), tradeoff: z.string(), uses: z.array(z.string()).optional() }),
   component: nothing,
 });
 
 export const Ways = defineComponent({
   name: "Ways",
-  description: "2 or 3 fair ways to do what the user asks, as cards to pick from. question: at most 8 words.",
+  description: "2 or 3 fair ways to do it, as cards to pick. question: at most 6 words.",
   props: z.object({ question: z.string(), ways: z.array(Way.ref) }),
   component: ({ props, statementId }) => <WaysBlock props={props as Record<string, unknown>} statementId={statementId} />,
 });
 
 export const Option = defineComponent({
   name: "Option",
-  description: "One answer to a Pick. label: at most 5 words. note: at most 8 words.",
+  description: "label: at most 5 words. note: at most 8 words.",
   props: z.object({ label: z.string(), icon: z.string(), note: z.string().optional() }),
   component: nothing,
 });
 
 export const Pick = defineComponent({
   name: "Pick",
-  description: "A question with 3 to 6 options shown as tiles with icons; the user picks and the pick comes back as their next message. multiple: true to pick several.",
+  description: "A question too open to answer yet, with 3 to 6 options as icon tiles. multiple: true to pick several.",
   props: z.object({ question: z.string(), options: z.array(Option.ref), multiple: z.boolean().optional() }),
   component: ({ props, statementId }) => <PickBlock props={props as Record<string, unknown>} statementId={statementId} />,
 });
 
 export const Item = defineComponent({
   name: "Item",
-  description: 'One card of a Board. column: "tienes" (exists: needs its ref), "falta" (to write) or "decidir" (to decide). title: at most 6 words. note: at most 10 words.',
+  description: 'column: "tienes" (exists), "falta" (to write) or "decidir". title: at most 6 words. note: at most 8 words.',
   props: z.object({ column: z.string(), title: z.string(), icon: z.string(), ref: z.string().optional(), note: z.string().optional() }),
   component: nothing,
 });
 
 export const Board = defineComponent({
   name: "Board",
-  description: "A plan of the work: what the user already has, what is missing and what to decide, 3 to 9 Items. title: at most 8 words.",
+  description: "A plan: what the user has, what is missing, what to decide; 3 to 9 Items. title: at most 6 words.",
   props: z.object({ title: z.string(), items: z.array(Item.ref) }),
   component: ({ props, statementId }) => <BoardBlock props={props as Record<string, unknown>} statementId={statementId} />,
 });
 
 export const Next = defineComponent({
   name: "Next",
-  description: "2 or 3 questions the user could ask next, in their voice, at most 12 words each.",
+  description: "2 or 3 questions the user could ask next, in their voice, at most 8 words each.",
   props: z.object({ questions: z.array(z.string()) }),
-  component: ({ props, statementId }) => <NextBlock props={props as Record<string, unknown>} statementId={statementId} />,
+  // The Answer draws the row itself, with «Ponme a prueba».
+  component: nothing,
 });
 
 export const Snippet = defineComponent({
   name: "Snippet",
-  description: 'The real lines of a ref ("r3", "r3:18" or "r3:41-52"). note: what to look at.',
+  description: 'The real lines of one place ("r3", "r3:18" or "r3:41-52"). note: at most 10 words.',
   props: z.object({ ref: z.string(), note: z.string().optional() }),
   component: ({ props }) => <SnippetBlock cite={props.ref} note={props.note} />,
 });
 
 export const Callout = defineComponent({
   name: "Callout",
-  description: 'A short aside. kind: "note", or "watch" for a pitfall.',
+  description: 'A pitfall the picture can\'t show. kind: "watch". text: at most 14 words.',
   props: z.object({ kind: z.enum(["note", "watch"]), text: z.string() }),
   component: ({ props }) => <CalloutBlock kind={props.kind} text={props.text} />,
 });
 
 export const Side = defineComponent({
   name: "Side",
-  description: "One side of a SideBySide: the code name, the ref of the lines to light, up to 4 short points.",
+  description: "One side of a SideBySide: the code name and the ref of the lines to light.",
   props: z.object({ title: z.string(), ref: z.string(), points: z.array(z.string()).optional() }),
   component: nothing,
 });
@@ -139,7 +142,7 @@ const sideOf = (value: unknown) => (value as { props?: SideProps } | undefined)?
 
 export const SideBySide = defineComponent({
   name: "SideBySide",
-  description: "The same idea in two places: two real snippets side by side. note: one sentence on what differs.",
+  description: "The same idea in two places: two real snippets side by side. title: at most 6 words. note: at most 12 words on what differs.",
   props: z.object({ title: z.string(), left: Side.ref, right: Side.ref, note: z.string().optional() }),
   component: ({ props }) => <SideBySideBlock title={props.title} left={sideOf(props.left)} right={sideOf(props.right)} note={props.note} />,
 });
@@ -154,37 +157,37 @@ export const Compare = defineComponent({
 
 export const Lines = defineComponent({
   name: "Lines",
-  description: 'One stop: a range like "r2:696-700", 1 to 12 lines, and at most 25 words on what they do.',
+  description: 'One stop: a range like "r2:696-700", 1 to 8 lines. text: at most 10 words on what they do.',
   props: z.object({ ref: z.string(), text: z.string() }),
   component: nothing,
 });
 
 export const Walkthrough = defineComponent({
   name: "Walkthrough",
-  description: "Reads real code stop by stop; each stop lights its lines. 2 to 6 stops in reading order, in one or two refs. title: at most 8 words.",
+  description: "Real code read stop by stop: 2 to 4 stops in reading order, in one or two refs. title: at most 6 words.",
   props: z.object({ title: z.string(), stops: z.array(Lines.ref) }),
   component: ({ props }) => <WalkthroughBlock props={props as Record<string, unknown>} />,
 });
 
 export const Match = defineComponent({
   name: "Match",
-  description: 'a, b: refs in the two repos (b is "" when there is none). sure: "segura", "probable" or "dudosa". note: at most 10 words.',
+  description: 'a, b: refs in the two repos (b is "" when there is none). sure: "segura", "probable" or "dudosa" (a guess). note: at most 8 words.',
   props: z.object({ a: z.string(), b: z.string(), sure: z.string(), note: z.string().optional() }),
   component: nothing,
 });
 
 export const Matches = defineComponent({
   name: "Matches",
-  description: "What in one repo corresponds to what in another. 2 to 8 pairs, the same repo always first.",
+  description: "What in one repo matches what in another: 2 to 8 pairs, the same repo always first. title: at most 6 words.",
   props: z.object({ title: z.string(), pairs: z.array(Match.ref) }),
   component: ({ props, statementId }) => <MatchesBlock props={props as Record<string, unknown>} statementId={statementId} />,
 });
 
 export const Check = defineComponent({
   name: "Check",
-  description: "A one-question check. options: exactly 3. answer: the number of the right option (1, 2 or 3). why: one sentence.",
-  props: z.object({ question: z.string(), options: z.array(z.string()).length(3), answer: z.number().int(), why: z.string() }),
-  component: ({ props, statementId }) => <CheckBlock question={props.question} options={Array.isArray(props.options) ? props.options : []} answer={props.answer} why={props.why} statementId={statementId} />,
+  description: "Only when the user asks «Ponme a prueba». options: exactly 3. answer: the number of the right option (1, 2 or 3). why: one sentence. ref: the lines that prove it.",
+  props: z.object({ question: z.string(), options: z.array(z.string()).length(3), answer: z.number().int(), why: z.string(), ref: z.string().optional() }),
+  component: ({ props, statementId }) => <CheckBlock question={props.question} options={Array.isArray(props.options) ? props.options : []} answer={props.answer} why={props.why} cite={props.ref} statementId={statementId} />,
 });
 
 export const Text = defineComponent({
@@ -194,27 +197,65 @@ export const Text = defineComponent({
   component: ({ props }) => <TextBlock md={props.md} />,
 });
 
-export const LIMITS = { Ways: 1, Pick: 1, Board: 1, Puzzle: 1, Matches: 1, Walkthrough: 1, SideBySide: 1, Snippet: 2, Text: 2, Callout: 2, Check: 1, Next: 1 } as const;
+export const LIMITS = { Ways: 1, Pick: 1, Board: 1, Puzzle: 1, Matches: 1, Walkthrough: 1, SideBySide: 1, Snippet: 1, Text: 1, Callout: 1, Check: 3, Next: 1 } as const;
 export const BLOCKS = ["Ways", "Pick", "Board", "Puzzle", "Matches", "Walkthrough", "SideBySide", "Snippet", "Callout", "Compare", "Check", "Text", "Next"] as const;
-/** The drawings: at most 2 in an answer, so it stays one idea. */
+/** The drawings: one an answer, so it stays one idea; the next one is a click away. */
 export const BIG_BLOCKS = ["Ways", "Pick", "Board", "Puzzle", "Matches", "Walkthrough", "SideBySide"] as const;
-export const MAX_BIG = 2;
+export const MAX_BIG = 1;
 /** At most one of these per answer: the block the reader answers by picking. */
 export const CHOICE_BLOCKS = ["Ways", "Pick", "Board"] as const;
-/** Where a block goes, whatever order the model wrote: the choice first, then the figure, the rest, the check, the
- * next questions. Fixed from the root line, so nothing jumps while it streams. */
+/** The pictures of real code: next to one, a Snippet or a Text only repeats it. */
+export const PICTURES = ["Puzzle", "Matches", "Walkthrough", "SideBySide", "Compare"] as const;
+/** Where a block goes, whatever order the model wrote: the choice or the picture, then a Callout, the Checks, and the
+ * next questions last. Fixed from the root line, so nothing jumps while it streams. */
 const RANK: Record<string, number> = { Ways: 0, Pick: 0, Board: 0, Puzzle: 1, Matches: 1, Walkthrough: 2, SideBySide: 3, Snippet: 3, Compare: 3, Callout: 4, Text: 4, Check: 5, Next: 6 };
 export const ICON_LIST = ICON_NAMES.join(", ");
 
-function AnswerView({ lede, blocks }: { lede: string; blocks: unknown[] }) {
-  const renderNode = useRenderNode();
-  const seen: Record<string, number> = {};
-  const typeOf = (block: unknown) => (block as { typeName?: string } | null)?.typeName ?? "";
+const typeOf = (block: unknown) => (block as { typeName?: string } | null)?.typeName ?? "";
+const has = (list: readonly string[], type: string) => list.includes(type);
+
+/** The blocks an answer draws, in order: what the model wrote, cut to one picture or choice, a Callout, the Checks of a
+ * quiz, and Next last. Text and Snippet go when there is a picture; a Check only answers «Ponme a prueba». */
+export function drawnBlocks(blocks: unknown[], quiz: boolean) {
   const ordered = blocks
-    .map((block, i) => ({ block, i, rank: RANK[typeOf(block)] ?? 4 }))
+    .map((block, i) => ({ block, i, type: typeOf(block), rank: RANK[typeOf(block)] ?? 4 }))
+    .filter(({ type }) => has(BLOCKS, type))
     .sort((a, b) => a.rank - b.rank || a.i - b.i);
+  const picture = ordered.some(({ type }) => has(PICTURES, type));
+  const seen: Record<string, number> = {};
   let choice = false;
   let big = 0;
+  return ordered.filter(({ type }) => {
+    if (picture && (type === "Text" || type === "Snippet")) return false;
+    if (type === "Check" && !quiz) return false;
+    if (has(CHOICE_BLOCKS, type)) {
+      if (choice) return false;
+      choice = true;
+    }
+    if (has(BIG_BLOCKS, type)) {
+      if (big >= MAX_BIG) return false;
+      big += 1;
+    }
+    seen[type] = (seen[type] ?? 0) + 1;
+    const limit = LIMITS[type as keyof typeof LIMITS];
+    return !limit || seen[type]! <= limit;
+  });
+}
+
+function AnswerView({ lede, blocks }: { lede: string; blocks: unknown[] }) {
+  const renderNode = useRenderNode();
+  const turn = React.useContext(TurnContext);
+  const [firsts, setFirsts] = React.useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const drawn = drawnBlocks(blocks, turn.quiz);
+  const types = drawn.map(({ type }) => type);
+  const next = drawn.find(({ type }) => type === "Next")?.block as { statementId?: string; props?: Record<string, unknown> } | undefined;
+  // «Ponme a prueba» follows a picture or a snippet of real code, never a choice, and never a quiz.
+  const quizMe = !turn.quiz && types.some((type) => has(PICTURES, type) || type === "Snippet") && !types.some((type) => has(CHOICE_BLOCKS, type));
+  const checks = types.filter((type) => type === "Check").length;
+  const quiz = React.useMemo(
+    () => ({ answered: (id: string, right: boolean) => setFirsts((map) => (map.has(id) ? map : new Map(map).set(id, right))) }),
+    [],
+  );
   return (
     <article className="g-answer">
       {lede ? (
@@ -222,30 +263,22 @@ function AnswerView({ lede, blocks }: { lede: string; blocks: unknown[] }) {
           <Inline md={lede} />
         </p>
       ) : null}
-      {ordered.map(({ block, i }) => {
-        const type = typeOf(block);
-        if (!(BLOCKS as readonly string[]).includes(type)) return null;
-        if ((CHOICE_BLOCKS as readonly string[]).includes(type)) {
-          if (choice) return null;
-          choice = true;
-        }
-        if ((BIG_BLOCKS as readonly string[]).includes(type)) {
-          if (big >= MAX_BIG) return null;
-          big += 1;
-        }
-        seen[type] = (seen[type] ?? 0) + 1;
-        const limit = LIMITS[type as keyof typeof LIMITS];
-        if (limit && seen[type]! > limit) return null;
-        const id = (block as { statementId?: string }).statementId ?? `${type}-${i}`;
-        return <React.Fragment key={id}>{renderNode(block)}</React.Fragment>;
-      })}
+      <QuizContext.Provider value={quiz}>
+        {drawn.map(({ block, i, type }) => {
+          if (type === "Next") return null;
+          const id = (block as { statementId?: string }).statementId ?? `${type}-${i}`;
+          return <React.Fragment key={id}>{renderNode(block)}</React.Fragment>;
+        })}
+      </QuizContext.Provider>
+      {turn.quiz && checks && firsts.size >= checks ? <p className="g-quiz-score">{quizScore([...firsts.values()].filter(Boolean).length, checks)}</p> : null}
+      <NextBlock props={next?.props ?? {}} statementId={next?.statementId} quiz={quizMe} />
     </article>
   );
 }
 
 export const Answer = defineComponent({
   name: "Answer",
-  description: "The answer. lede: one plain sentence that answers the question (at most 25 words). blocks, in order: a choice, an overview, a path, side by side, words, one Check, Next.",
+  description: "The answer. lede: one line that answers, at most 12 words. blocks: one picture or choice, then Next.",
   props: z.object({
     lede: z.string(),
     blocks: z.array(z.union([Ways.ref, Pick.ref, Board.ref, Puzzle.ref, Matches.ref, Walkthrough.ref, SideBySide.ref, Snippet.ref, Callout.ref, Compare.ref, Check.ref, Text.ref, Next.ref])),

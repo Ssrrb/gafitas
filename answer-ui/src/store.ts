@@ -146,7 +146,11 @@ export const RefsContext = React.createContext<ReadonlyMap<string, RefEntry>>(ne
 export const SelectedContext = React.createContext<string | null>(null);
 /** Which turn a block belongs to, so a figure plays its entrance once per answer (and never when replayed); `live`
  * while it still streams. */
-export const TurnContext = React.createContext<{ key: string; id: string; replay: boolean; live: boolean }>({ key: "", id: "", replay: false, live: false });
+export const TurnContext = React.createContext<{ key: string; id: string; replay: boolean; live: boolean; quiz: boolean }>({ key: "", id: "", replay: false, live: false, quiz: false });
+
+/** A turn asked with «Ponme a prueba»: its answer is the Checks. */
+export const QUIZ = "quiz";
+export const isQuiz = (via?: Via) => Boolean(via?.choices.includes(QUIZ));
 
 /** What was picked from each block so far, by "turn:block", from the later turns' `via`; and whether Pi is busy. */
 export const PicksContext = React.createContext<{ picked: ReadonlyMap<string, Via[]>; busy: boolean }>({ picked: new Map(), busy: false });

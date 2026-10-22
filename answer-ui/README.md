@@ -5,8 +5,11 @@ this page renders it with React and `@openuidev/react-lang`, inside a `WKWebView
 code and says how they fit; the page draws them as a jigsaw: each function, class or module a tile in its project's
 colour, each hand-off the edge two tiles share, labelled with what crosses it. Instead of paragraphs, the other blocks
 are things to read or pick from: a walk through real lines, two places side by side, what matches across two repos,
-ways to choose between, a question with icon tiles, a plan board. A pick is the next question, sent by the page. The
-page is in Spanish, and so are the answers (the prompt asks for it).
+ways to choose between, a question with icon tiles, a plan board. An answer is one line and one of these, then the
+next questions as chips (and «Ponme a prueba», which asks for a quiz on the code just shown). The model only cites
+lines; the page picks what to show of them (`src/curate.ts`): a tile shows the 2–3 lines where its piece hands work to
+the next one, a code view the cited lines and one of context, the rest folded into "⋯ N líneas". A pick is the next
+question, sent by the page. The page is in Spanish, and so are the answers (the prompt asks for it).
 
 ```sh
 ../scripts/build-answer-ui.sh   # → ../Resources/answer-ui/{index.html, assets/, system-prompt.txt}
@@ -70,7 +73,7 @@ Root is `Answer`. Positional arguments, in this order (`?` optional):
 
 ```
 Answer(lede, blocks: (Ways | Pick | Board | Puzzle | Matches | Walkthrough | SideBySide | Snippet | Callout | Check | Text | Next)[])
-Puzzle(title, pieces: (Piece | NewPiece | Idea)[], joints: Joint[], steps: Step[], caption?)
+Puzzle(title, pieces: (Piece | NewPiece | Idea)[], joints: Joint[], steps: Step[], caption?)   // caption: old chats only
 Piece(name, ref, kind?)                       // code that exists
 NewPiece(name, project, path, from?, note?)   // code still to write: a dashed tile in the gap
 Idea(name, note?)                             // a concept, when there are no refs
@@ -82,32 +85,34 @@ Pick(question, options: Option[], multiple?)  // 3–6 icon tiles, when the ques
 Option(label, icon, note?)
 Board(title, items: Item[])                   // 3–9 items in tienes / falta / decidir
 Item(column, title, icon, ref?, note?)        // an item under "tienes" needs its ref
-Walkthrough(title, stops: Lines[])            // 2–6 stops through real lines, at most 2 files
+Walkthrough(title, stops: Lines[])            // 2–4 stops (2–6 accepted) through real lines, at most 2 files
 Lines(ref, text)
-SideBySide(title, left: Side, right: Side, note?)   Side(title, ref, points?)
+SideBySide(title, left: Side, right: Side, note?)   Side(title, ref, points?)   // points: old chats only
 Matches(title, pairs: Match[])                // 2–8 pairs, a's in one repo and b's in another
 Match(a: ref, b: ref | "", sure: "segura" | "probable" | "dudosa", note?)
-Snippet(ref, note?)   Callout(kind: "note" | "watch", text)   Check(question, options[3], answer: 1–3, why)
-Text(md)   Next(questions[2–3])
+Snippet(ref, note?)   Callout(kind: "note" | "watch", text)   Check(question, options[3], answer: 1–3, why, ref?)
+Text(md)   Next(questions[2–3])                // Text: old chats only; Check: only in a «Ponme a prueba» turn
 ```
 
 `icon` is one of the short names in `src/icons.tsx` (lucide glyphs; anything else draws a small circle). The model never
 writes buttons or actions: every control is the page's. `Compare(left, right)` still parses, so older chats reopen, and
-draws as a SideBySide; it is left out of the prompt.
+draws as a SideBySide; it is left out of the prompt, as are Text, the Puzzle's caption and Side's points.
 
 A ref is `"r3"`, `"r3:18"` or `"r3:41-52"`, always inside the ref's lines. `src/prompt.ts` builds the system prompt from
-the library (`library.prompt`) with the rules and four examples (a puzzle with a walkthrough, a concept, ways,
-matches across requests and urllib3, all on real refs); the build writes it to `system-prompt.txt`.
+the library (`library.prompt`) with the rules and five short examples (a puzzle, a concept, ways, matches across
+requests and urllib3, a walkthrough, all on real refs and about 60 words each); the build writes it to
+`system-prompt.txt`.
 
 Validation (`src/validate.ts`, with the Puzzle's own rules in `src/puzzle/model.ts`) reports, each with its statement
 id: the parser's errors, lines that aren't statements or are cut off, names never defined, unknown or out-of-range
 refs, 2–6 pieces in at most 3 projects with at most 2 NewPieces, a Piece without a ref, two pieces on the same lines, a
 NewPiece in a project that isn't in the refs, joints that don't join two of the puzzle's pieces (or join one to
 itself, or twice), a piece in no joint, more than one joint between pieces that aren't neighbours in the list, steps
-that don't light a piece or joint by id, long names and labels, the counts and refs of the blocks above, and the block
-limits: each big block once, at most 2 of them, one of Ways, Pick and Board, 2 Snippets, 2 Texts. Some messages are
-soft (a missing effort, an unknown `sure`): they go to the repair turn but are never dropped. The page also orders the
-blocks (choices first, Next last) and keeps the first choice block if the model wrote two.
+that don't light a piece or joint by id, and the counts and refs of the blocks above. Some messages are soft (a
+missing effort, an unknown `sure`, and the word budget: a lede over 18 words, over 100 words of prose in the answer,
+code retyped in prose, a Piece or NewPiece named as a line of code, a quiz with no Check): they go to the repair turn
+once but are never dropped. What the page can cut by itself is never sent back: `drawnBlocks` in `src/library.tsx`
+draws one picture or choice, no Text or Snippet next to a picture, Checks only in a quiz, a Callout, and Next last.
 
 ## The puzzle
 
@@ -118,12 +123,14 @@ blocks (choices first, Next last) and keeps the first choice block if the model 
   2–6 pieces to up to 3 projects at five widths: shared edges, the knob inside the overlap, nothing overlapping.
 - `src/puzzle/path.ts`: tile outlines; each knob is one curve that the giver and the receiver trace in opposite
   directions, so they fit exactly.
-- `src/components/Puzzle.tsx`: the card (title, legend, the stage, hint, readout), the steps and the loose joints.
+- `src/components/Puzzle.tsx`: the card (title and the step readout with ‹ ›, the stage, the legend) and the loose
+  joints. Each tile's lines come from `tileRows` in `src/curate.ts`; `test/curate.test.ts` checks them.
   Lit is lime, the one colour of attention; tiles take their project's pale tint.
 - `src/components/Choices.tsx` Ways, Pick, Board and Next; `src/components/Learn.tsx` Walkthrough, SideBySide and
   Matches (confidence drawn as the line: solid, dashed, dotted); `src/styles/choices.css` their styles, which follow
   the answer column's width (container queries).
-- `src/components/Trail.tsx` the trail; `src/components/Others.tsx` "Otros lugares encontrados"; `src/strings.ts` every
+- `src/components/Trail.tsx` the trail, with "Otros lugares encontrados" (`src/components/Others.tsx`) inside the
+  open process; `src/components/Code.tsx` real lines with their folds; `src/strings.ts` every
   fixed Spanish string.
 
 Packages are installed with `--ignore-scripts` and the build sets `OPENUI_TELEMETRY_DISABLED=1`:

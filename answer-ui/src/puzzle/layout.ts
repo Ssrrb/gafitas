@@ -4,8 +4,9 @@
 // can't be an edge (rows apart, or bands that don't overlap) is "loose" and listed under the drawing.
 import type { Knob, Rect } from "./path";
 
-// SOCKET is a tile's top padding: room for the tab of the tile above (KNOB_DEPTH) before the words start.
-export const K = { H0: 106, SOCKET: 34, LINE: 18, UP: 30, PAD: 14, GAP: 12, OV: 72, LABEL_H: 40, LANE_MIN: 120, W_MIN: 184, W_MAX: 360, W_TILE: 320, CHAR: 7.8, INSET: 48 } as const;
+// SOCKET is a tile's top padding: room for the tab of the tile above (KNOB_DEPTH) before the words start. H0 holds one
+// row of code; each further row (up to 3) adds ROW.
+export const K = { H0: 104, ROW: 16, SOCKET: 34, LINE: 18, UP: 30, PAD: 14, GAP: 12, OV: 72, LABEL_H: 40, LANE_MIN: 120, W_MIN: 184, W_MAX: 360, W_TILE: 320, CHAR: 7.8, INSET: 48 } as const;
 /** The card's inner width when there is no DOM to measure (tests, first render). */
 export const DEFAULT_WIDTH = 738;
 
@@ -13,6 +14,8 @@ export interface LayoutPiece {
   /** The project; "" for an Idea, which takes the band of the piece before it. */
   band: string;
   name: string;
+  /** Rows of code the tile shows (1–3); every tile in a puzzle takes the most any needs. */
+  rows?: number;
 }
 
 export interface LayoutJoint {
@@ -120,7 +123,8 @@ export function layout(pieces: LayoutPiece[], joints: LayoutJoint[], available =
 
   const lines = Math.max(1, ...pieces.map((p) => wrapCount(p.name, Math.floor((W - 2 * K.PAD) / K.CHAR))));
   const upward = [...claimed].some(([upper, index]) => joints[index]!.from !== upper);
-  const H = K.H0 + (lines - 1) * K.LINE + (upward ? K.UP : 0);
+  const rows = Math.min(3, Math.max(1, ...pieces.map((p) => p.rows ?? 1)));
+  const H = K.H0 + (lines - 1) * K.LINE + (rows - 1) * K.ROW + (upward ? K.UP : 0);
 
   const ys: number[] = [];
   pieces.forEach((_, i) => ys.push(i === 0 ? 0 : ys[i - 1]! + H + (claimed.has(i - 1) ? 0 : K.GAP)));

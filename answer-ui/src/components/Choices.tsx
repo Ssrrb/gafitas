@@ -3,10 +3,10 @@
 // so a pick goes through OpenUI's own action (Renderer onAction → Swift → the chat's next question).
 import * as React from "react";
 import { useTriggerAction } from "@openuidev/react-lang";
-import { Check, CornerDownRight } from "lucide-react";
+import { Check } from "lucide-react";
 import { Icon } from "../icons";
 import { resolveRef } from "../refs";
-import { TurnContext, usePicks, useRefs, useSelected } from "../store";
+import { QUIZ, TurnContext, usePicks, useRefs, useSelected } from "../store";
 import { S } from "../strings";
 import { placeName } from "./Trail";
 import { RefChip } from "./RefChip";
@@ -65,7 +65,7 @@ export function WaysBlock({ props, statementId }: { props: Record<string, unknow
           const p = way.props ?? {};
           const id = way.statementId ?? str(p.title);
           const title = str(p.title);
-          const uses = (Array.isArray(p.uses) ? p.uses : []).map(String).filter((cite) => resolveRef(cite, refs).ok);
+          const uses = (Array.isArray(p.uses) ? p.uses : []).map(String).filter((cite) => resolveRef(cite, refs).ok).slice(0, 2);
           const effort = effortOf(p.effort);
           const picked = chosen.has(id) || sent === id;
           const others = ways.filter((w) => w !== way).map((w) => `${w.statementId} «${str(w.props?.title)}»`).join(", ");
@@ -312,37 +312,50 @@ export function BoardBlock({ props, statementId }: { props: Record<string, unkno
   );
 }
 
-export function NextBlock({ props, statementId }: { props: Record<string, unknown>; statementId?: string }) {
+/** The next questions as one row of chips, and «Ponme a prueba» after an answer with real code in it. */
+export function NextBlock({ props, statementId, quiz = false }: { props: Record<string, unknown>; statementId?: string; quiz?: boolean }) {
   const send = useSend();
-  const { turn, chosen, closed } = usePickState(statementId);
-  const questions = [...new Set((Array.isArray(props.questions) ? props.questions : []).map(String).map((q) => q.trim()).filter(Boolean))];
-  if (turn.live || !questions.length) return null;
+  const block = statementId ?? "answer";
+  const { turn, chosen, closed } = usePickState(block);
+  const questions = [...new Set((Array.isArray(props.questions) ? props.questions : []).map(String).map((q) => q.trim()).filter(Boolean))].slice(0, 3);
+  if (turn.live || (!questions.length && !quiz)) return null;
+  const chip = (id: string, label: React.ReactNode, onClick: () => void, extra?: Record<string, string>) => {
+    const asked = chosen.has(id);
+    return (
+      <li key={id}>
+        <button type="button" className="g-next-q" data-asked={asked ? "" : undefined} aria-disabled={closed || undefined} onClick={() => !closed && onClick()} {...extra}>
+          {asked ? <Check className="g-icon" size={13} strokeWidth={2} aria-hidden="true" /> : null}
+          {label}
+        </button>
+      </li>
+    );
+  };
   return (
-    <section className="g-next" aria-label={S.next}>
-      <h2 className="g-section">{S.next}</h2>
+    <nav className="g-next" aria-label={S.next}>
       <ul>
-        {questions.slice(0, 3).map((question, i) => {
-          const id = `q${i + 1}`;
-          const asked = chosen.has(id);
-          return (
-            <li key={question}>
-              <button
-                type="button"
-                className="g-next-q"
-                data-asked={asked ? "" : undefined}
-                aria-disabled={closed || undefined}
-                onClick={() => {
-                  if (closed) return;
-                  send(question, { kind: "next", block: statementId, choices: [id] });
-                }}
-              >
-                <CornerDownRight className="g-icon" size={14} strokeWidth={1.75} aria-hidden="true" />
-                <span>{question}</span>
-              </button>
-            </li>
-          );
-        })}
+        {questions.map((question, i) => chip(`q${i + 1}`, <span>{question}</span>, () => send(question, { kind: "next", block, choices: [`q${i + 1}`] })))}
+        {quiz
+          ? chip(
+              QUIZ,
+              <>
+                <Icon name="checklist" size={13} />
+                <span>{S.quizMe}</span>
+              </>,
+              () =>
+                send(S.quizMeMessage, {
+                  kind: "next",
+                  block,
+                  choices: [QUIZ],
+                  note:
+                    `The user asked to be quizzed on your answer in ${turn.id}. Reply with root = Answer(lede, [c1, c2, c3]) and nothing else: ` +
+                    "a lede of at most 8 words, then 2 or 3 Check(question, options, answer, why, ref) about the code you cited there, " +
+                    'each ref the lines that prove the answer. For example: c1 = Check("¿Quién llama a urlopen?", ["Session.send", ' +
+                    '"HTTPAdapter.send", "PoolManager.urlopen"], 2, "HTTPAdapter.send le pasa la petición a conn.urlopen.", "r2:696")',
+                }),
+              { "data-quiz": "" },
+            )
+          : null}
       </ul>
-    </section>
+    </nav>
   );
 }

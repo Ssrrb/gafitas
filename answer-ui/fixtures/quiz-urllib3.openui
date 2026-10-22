@@ -1,0 +1,4 @@
+root = Answer("Tres preguntas sobre el viaje de la petición.", [c1, c2, c3])
+c1 = Check("¿Quién llama a urlopen?", ["Session.send", "HTTPAdapter.send", "HTTPConnectionPool._make_request"], 2, "HTTPAdapter.send le pasa la petición a conn.urlopen.", "r2:696-700")
+c2 = Check("¿Dónde se elige el adaptador?", ["En Session.send", "En urlopen", "En _make_request"], 1, "Session.send pide el adaptador a get_adapter antes de enviar.", "r1:778")
+c3 = Check("¿Qué recibe _make_request?", ["Solo la URL", "La conexión, el método y la URL", "Un PreparedRequest"], 2, "urlopen le pasa la conexión del pool, el método y la URL.", "r3:782-785")

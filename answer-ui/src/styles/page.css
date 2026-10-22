@@ -101,13 +101,19 @@ code {
   text-wrap: pretty;
 }
 
+.g-caption {
+  margin: 10px 2px 0;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
 .g-lede code,
 .g-text code,
 .g-callout code,
 .g-caption code,
-.g-step-text code,
+.g-stop-say code,
 .g-check code,
-.g-side li code {
+.g-side-point code {
   padding: 0 4px;
   border-radius: 4px;
   background: var(--g-fill);
@@ -301,7 +307,6 @@ code {
 .g-chip:focus-visible,
 .g-button:focus-visible,
 .g-option:focus-visible,
-.g-steps button:focus-visible,
 .g-link:focus-visible,
 .g-loose-piece:focus-visible,
 .g-other:focus-visible,
@@ -399,6 +404,34 @@ code {
 
 .g-line[data-focus] {
   background: color-mix(in srgb, var(--g-lit) 16%, transparent);
+}
+
+.g-line[data-comment] .g-lt {
+  color: var(--g-muted);
+}
+
+/* A fold: the hidden lines, one click from being read in place. */
+.g-gap {
+  display: block;
+  width: 100%;
+  padding: 0 14px 0 calc(var(--g-gutter, 3ch) + 24px);
+  border: 0;
+  background: none;
+  color: var(--g-muted);
+  font: inherit;
+  text-align: left;
+  white-space: pre;
+  cursor: pointer;
+}
+
+.g-gap:hover {
+  background: var(--g-hover);
+  color: var(--g-text);
+}
+
+.g-gap:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: -2px;
 }
 
 .g-ln {

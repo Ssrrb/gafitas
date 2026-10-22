@@ -1,7 +1,7 @@
 // Swift → JS: window.gafitas. See README.md for the contract.
 import { mergeStatements } from "@openuidev/lang-core";
 import { refIdOf } from "./refs";
-import { newTurn, store, type Trail, type Via } from "./store";
+import { newTurn, store, type Trail, type Via, isQuiz } from "./store";
 import { pruneBroken, validateProgram } from "./validate";
 
 /** A turn saved in the history log, drawn as it was. */
@@ -95,7 +95,7 @@ export const api: GafitasApi = {
     } catch {
       merged = turn.text;
     }
-    const errors = validateProgram(merged, store.get().refs);
+    const errors = validateProgram(merged, store.get().refs, { quiz: isQuiz(turn.via) });
     const kept = errors.length ? pruneBroken(merged, errors) : merged;
     store.patchTurn(turn.id, { text: kept, phase: "done", revision: turn.revision + 1, final: true, dropped: errors, notice: errors.some((e) => !e.soft) }, true);
   },

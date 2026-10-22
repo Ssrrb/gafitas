@@ -1,12 +1,12 @@
 // The small blocks: Snippet, Callout, Check, Text.
 import * as React from "react";
 import { useTriggerAction } from "@openuidev/react-lang";
-import { linesOf, resolveRef } from "../refs";
+import { codeRows } from "../curate";
+import { resolveRef } from "../refs";
 import { TurnContext, usePicks, useRefs, useSelected } from "../store";
 import { notQuite, S } from "../strings";
-import { hoverRef, openRef, RefChip } from "./RefChip";
-
-export const SNIPPET_LINES = 14;
+import { CodeLines } from "./Code";
+import { RefChip } from "./RefChip";
 
 export function SnippetBlock({ cite, note }: { cite: string; note?: string }) {
   const refs = useRefs();
@@ -14,41 +14,13 @@ export function SnippetBlock({ cite, note }: { cite: string; note?: string }) {
   const resolved = resolveRef(cite, refs);
   if (!resolved.ok) return null;
   const ref = resolved.ref;
-  const all = linesOf(ref.entry).filter((line) => line.n >= ref.from && line.n <= ref.to);
-  let shown = all;
-  if (all.length > SNIPPET_LINES) {
-    const at = Math.max(0, all.findIndex((line) => line.n === ref.line));
-    const start = Math.min(Math.max(0, at - Math.floor(SNIPPET_LINES / 2) + 1), all.length - SNIPPET_LINES);
-    shown = all.slice(start, start + SNIPPET_LINES);
-  }
-  const mark = ref.single || (ref.line >= ref.from && ref.line <= ref.to && ref.entry.focus === ref.line) ? ref.line : null;
-  const width = String(shown[shown.length - 1]?.n ?? 0).length;
   return (
     <figure className="g-snippet" data-selected={selected === ref.entry.id ? "" : undefined}>
       <figcaption className="g-snippet-head">
         <RefChip cite={cite} />
         {note ? <span className="g-snippet-note">{note}</span> : null}
       </figcaption>
-      <pre className="g-code" style={{ "--g-gutter": `${width + 1}ch` } as React.CSSProperties}>
-        <code>
-          {shown.map((line) => (
-            <span
-              key={line.n}
-              className="g-line"
-              data-focus={line.n === mark ? "" : undefined}
-              onClick={() => openRef(ref, line.n)}
-              onPointerEnter={() => hoverRef(ref)}
-              onPointerLeave={() => hoverRef(null)}
-            >
-              <span className="g-ln" aria-hidden="true">
-                {line.n}
-              </span>
-              <span className="g-lt">{line.text || " "}</span>
-              {"\n"}
-            </span>
-          ))}
-        </code>
-      </pre>
+      <CodeLines entry={ref.entry} rows={codeRows(ref.entry, ref.from, ref.to, ref.line)} />
     </figure>
   );
 }
@@ -64,8 +36,14 @@ export function CalloutBlock({ kind, text }: { kind: string; text: string }) {
   );
 }
 
-export function CheckBlock({ question, options, answer, why, statementId }: { question: string; options: string[]; answer: number; why: string; statementId?: string }) {
+/** A quiz's Checks report their first answer, so the Answer can say how many were right at the first try. */
+export const QuizContext = React.createContext<{ answered: (id: string, right: boolean) => void }>({ answered: () => {} });
+
+export function CheckBlock({ question, options, answer, why, cite, statementId }: { question: string; options: string[]; answer: number; why: string; cite?: string; statementId?: string }) {
   const [chosen, setChosen] = React.useState<number | null>(null);
+  const refs = useRefs();
+  const quiz = React.useContext(QuizContext);
+  const proof = cite ? resolveRef(cite, refs) : null;
   const trigger = useTriggerAction();
   const turn = React.useContext(TurnContext);
   const { busy } = usePicks();
@@ -81,7 +59,17 @@ export function CheckBlock({ question, options, answer, why, statementId }: { qu
           const n = i + 1;
           const state = chosen === null ? undefined : n === right ? "right" : n === chosen ? "wrong" : undefined;
           return (
-            <button key={i} type="button" className="g-option" data-state={state} aria-pressed={chosen === n} onClick={() => setChosen(n)}>
+            <button
+              key={i}
+              type="button"
+              className="g-option"
+              data-state={state}
+              aria-pressed={chosen === n}
+              onClick={() => {
+                if (chosen === null && statementId) quiz.answered(statementId, n === right);
+                setChosen(n);
+              }}
+            >
               <span className="g-option-n" aria-hidden="true">
                 {n}
               </span>
@@ -99,6 +87,14 @@ export function CheckBlock({ question, options, answer, why, statementId }: { qu
           </>
         )}
       </p>
+      {chosen !== null && proof?.ok ? (
+        <figure className="g-check-proof">
+          <figcaption>
+            <RefChip cite={cite!} />
+          </figcaption>
+          <CodeLines entry={proof.ref.entry} rows={codeRows(proof.ref.entry, proof.ref.from, proof.ref.to, proof.ref.line, 0, false)} />
+        </figure>
+      ) : null}
       {chosen !== null && chosen !== right && !busy && !turn.live ? (
         <button
           type="button"

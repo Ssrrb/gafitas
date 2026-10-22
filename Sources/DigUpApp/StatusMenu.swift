@@ -41,7 +41,7 @@ enum StatusIcon {
             }
             return true
         }
-        image.accessibilityDescription = "DigUp"
+        image.accessibilityDescription = "Gafitas"
         return image
     }
 }
@@ -93,7 +93,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             shownPaused = paused
             shownUpdate = update
         }
-        button.toolTip = "DigUp — \(model.statusLine)"
+        button.toolTip = "Gafitas — \(model.statusLine)"
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -105,7 +105,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
         if let version = model.updateAvailable {
-            menu.addItem(ActionMenuItem("Update to DigUp \(version)…") { [weak self] in self?.onCheckForUpdates() })
+            menu.addItem(ActionMenuItem("Update to Gafitas \(version)…") { [weak self] in self?.onCheckForUpdates() })
             menu.addItem(.separator())
         }
 
@@ -118,7 +118,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             search.keyEquivalentModifierMask = modifiers
         }
         menu.addItem(search)
-        menu.addItem(ActionMenuItem("Open DigUp") { [weak self] in self?.onOpenWindow() })
+        menu.addItem(ActionMenuItem("Open Gafitas") { [weak self] in self?.onOpenWindow() })
         if model.hasFolders {
             menu.addItem(.separator())
             let paused = model.status.paused
@@ -134,10 +134,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(ActionMenuItem("Settings…", key: ",") { [weak self] in self?.onSettings() })
-        if model.updateAvailable == nil {
+        if model.updateAvailable == nil, Updates.enabled {
             menu.addItem(ActionMenuItem("Check for Updates…") { [weak self] in self?.onCheckForUpdates() })
         }
-        menu.addItem(ActionMenuItem("Quit DigUp", key: "q") { NSApp.terminate(nil) })
+        menu.addItem(ActionMenuItem("Quit Gafitas", key: "q") { NSApp.terminate(nil) })
     }
 
     /// The menu as text, for the -debugMenu launch argument (menus can't be clicked from a script).

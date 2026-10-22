@@ -20,10 +20,14 @@ final class Updates: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate
         controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
     }
 
+    /// Gafitas has no update feed of its own yet (`SUFeedURL`), and must never take DigUp's: no checks, no menu items.
+    static var enabled: Bool { Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil }
+
     /// Dev and test runs (their own defaults suite) don't check: Sparkle keeps its state in the app's real defaults.
     /// `-debugUpdates YES` lets one check anyway.
     func start() {
         let defaults = UserDefaults.standard
+        guard Self.enabled else { return }
         guard defaults.string(forKey: "defaultsSuite") == nil || defaults.bool(forKey: "debugUpdates") else { return }
         controller.startUpdater()
         log("updates: \(controller.updater.automaticallyChecksForUpdates ? "checking daily" : "automatic checks off") "

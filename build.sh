@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds build.noindex/DigUp.app, signed with the hardened runtime (as releases are, so dev builds behave the same).
+# Builds build.noindex/Gafitas.app, signed with the hardened runtime (as releases are, so dev builds behave the same).
 #   ./build.sh                       signed with the identity named in .sign-id (one line, gitignored), so macOS keeps
 #                                    folder permissions across rebuilds; ad-hoc without it (macOS then asks again
 #                                    after each build)
@@ -7,12 +7,12 @@
 #   RELEASE=1 SIGN_ID="Developer ID Application: …" ./build.sh   plus the secure timestamp notarization needs
 #                                    (scripts/release.sh does that, then notarizes and makes the DMG)
 # There's no install step: run it from build.noindex (see scripts/dev-run.sh).
-# For testing in-app updates with a copy of its own (never the installed DigUp's settings or updates), these replace
+# For testing in-app updates with a copy of its own (never the installed Gafitas's settings or updates), these replace
 # Info.plist values: BUNDLE_ID, VERSION, BUILD_NUMBER, SPARKLE_FEED (the appcast URL), SPARKLE_KEY (the EdDSA public key).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_NAME="DigUp"
+APP_NAME="Gafitas"
 # ".noindex" keeps Spotlight (and the Apps list) from showing this staging copy.
 APP="build.noindex/$APP_NAME.app"
 
@@ -37,12 +37,15 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
 # The binary is DigUpApp in SwiftPM (it can't share a name with the `digup` CLI on a case-insensitive disk).
 cp "$BIN_DIR/DigUpApp" "$APP/Contents/MacOS/$APP_NAME"
-# The indexing helper lives in Helpers/: next to DigUp in MacOS/ it would collide on a case-insensitive disk.
+# The indexing helper lives in Helpers/: next to Gafitas in MacOS/ it would collide on a case-insensitive disk.
 cp "$BIN_DIR/digup" "$APP/Contents/Helpers/digup"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
-xcrun actool --compile "$APP/Contents/Resources" --platform macosx --target-device mac --minimum-deployment-target 14.0 \
-  --app-icon AppIcon --output-partial-info-plist "$(mktemp -d)/AppIcon.plist" --enable-on-demand-resources NO \
-  --development-region en "$PWD/Resources/AppIcon/AppIcon.icon" > /dev/null
+# actool comes with Xcode only: with just the Command Line Tools the .icns alone is the icon.
+if xcrun --find actool > /dev/null 2>&1; then
+  xcrun actool --compile "$APP/Contents/Resources" --platform macosx --target-device mac --minimum-deployment-target 14.0 \
+    --app-icon AppIcon --output-partial-info-plist "$(mktemp -d)/AppIcon.plist" --enable-on-demand-resources NO \
+    --development-region en "$PWD/Resources/AppIcon/AppIcon.icon" > /dev/null
+fi
 cp "$ICON" "$APP/Contents/Resources/AppIcon.icns"   # over actool's plainer fallback: ours has simplified 16 and 32 px
 cp Resources/Acknowledgements.txt "$APP/Contents/Resources/Acknowledgements.txt"
 cp Resources/AppIcon/tray.png Resources/AppIcon/tray-dim.png Resources/AppIcon/tray-paused.png "$APP/Contents/Resources/"   # the menubar's logo

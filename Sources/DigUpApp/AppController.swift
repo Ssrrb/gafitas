@@ -78,7 +78,7 @@ final class AppController {
             model.hotkey = hotkeys.register(combo) ? combo : nil
             log(model.hotkey == nil ? "hotkey \(combo.display) is taken by another app" : "hotkey \(combo.display)")
         } else {
-            log("hotkey: can't read \"\(model.settings.hotkey)\" (try cmd+shift+space)")
+            log("hotkey: can't read \"\(model.settings.hotkey)\" (try opt+shift+space)")
         }
 
         Previews.shared.passage = { [engine] id, code in await engine.text(ofSegment: id, code: code) }
@@ -209,7 +209,7 @@ final class AppController {
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
         panel.prompt = prompt
-        panel.message = "Choose folders for DigUp to search."
+        panel.message = "Choose folders for Gafitas to search."
         let finish = { (response: NSApplication.ModalResponse) in
             done(response == .OK ? panel.urls.map { AppSettings.folderURL($0.path) } : [])
         }

@@ -40,15 +40,15 @@ extension Data {
     }
 }
 
-/// Where DigUp keeps its own files on each OS: the model and the index.
+/// Where Gafitas keeps its own files on each OS: the model and the index.
 public enum AppPaths {
-    /// macOS: ~/Library/Application Support/DigUp. Windows: %LOCALAPPDATA%\DigUp. Linux: $XDG_DATA_HOME/digup, or
+    /// macOS: ~/Library/Application Support/Gafitas (its own index and settings, apart from an installed DigUp's). Windows: %LOCALAPPDATA%\DigUp. Linux: $XDG_DATA_HOME/digup, or
     /// ~/.local/share/digup.
     public static var applicationSupport: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let environment = ProcessInfo.processInfo.environment
         #if os(macOS)
-        return home.appendingPathComponent("Library/Application Support/DigUp")
+        return home.appendingPathComponent("Library/Application Support/Gafitas")
         #elseif os(Windows)
         if let local = environment["LOCALAPPDATA"], !local.isEmpty {
             return URL(fileURLWithPath: local).appendingPathComponent("DigUp")

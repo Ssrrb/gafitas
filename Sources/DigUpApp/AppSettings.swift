@@ -3,11 +3,11 @@ import Foundation
 
 /// What to index, where the index and the model live, and the hotkey.
 ///
-/// Saved in the app's defaults domain (com.abdurrahim.DigUp). Launch arguments override any of it without being
+/// Saved in the app's defaults domain (com.ssrrb.Gafitas). Launch arguments override any of it without being
 /// saved, which is how tests point the app at the testbed and never at real folders:
 ///
-///     DigUp.app/Contents/MacOS/DigUp -roots ~/DigUpTestbed/real -indexDir <repo>/.dev/app-index \
-///         -modelsDir <repo>/.dev/models -defaultsSuite com.abdurrahim.DigUp.dev
+///     Gafitas.app/Contents/MacOS/Gafitas -roots ~/DigUpTestbed/real -indexDir <repo>/.dev/app-index \
+///         -modelsDir <repo>/.dev/models -defaultsSuite com.ssrrb.Gafitas.dev
 ///
 /// `-roots` takes one folder, several joined with ":", or a plist array. `-defaultsSuite` keeps what the app saves
 /// (onboarding's folders, a new hotkey) out of the real settings. With no roots the app indexes nothing and opens
@@ -44,9 +44,9 @@ nonisolated struct AppSettings: Sendable {
     var codeQuietSeconds: Double
 
     static let supportDirectory = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/DigUp")
+        .appendingPathComponent("Library/Application Support/Gafitas")
     static let defaultIndexDirectory = supportDirectory.appendingPathComponent("index.noindex")
-    static let defaultHotkey = "cmd+shift+space"
+    static let defaultHotkey = "opt+shift+space"   // DigUp has ⇧⌘Space, and both may run
 
     /// The battery switch, in onboarding and Settings.
     static let batteryTitle = "Index on battery power"

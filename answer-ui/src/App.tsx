@@ -6,7 +6,7 @@ import { library } from "./library";
 import { post } from "./post";
 import { isStill } from "./still";
 import { S } from "./strings";
-import { RefsContext, SelectedContext, TurnContext, useThread, type Turn } from "./store";
+import { PicksContext, RefsContext, SelectedContext, TurnContext, useThread, type Turn, type Via } from "./store";
 import { validateProgram, type AnswerError } from "./validate";
 import type { RefTable } from "./refs";
 
@@ -42,7 +42,8 @@ function TurnView({ turn, chat, first, last, refs }: { turn: Turn; chat: number;
   }, []);
 
   const Heading = first ? "h1" : "h2";
-  const context = React.useMemo(() => ({ key: `${chat}:${turn.id}`, replay: turn.replay }), [chat, turn.id, turn.replay]);
+  const live = turn.phase !== "done" && !turn.replay;
+  const context = React.useMemo(() => ({ key: `${chat}:${turn.id}`, id: turn.id, replay: turn.replay, live }), [chat, turn.id, turn.replay, live]);
   return (
     <section ref={section} className="g-turn" aria-label={turn.question || undefined}>
       {turn.question ? <Heading className="g-question">{turn.question}</Heading> : null}
@@ -54,6 +55,11 @@ function TurnView({ turn, chat, first, last, refs }: { turn: Turn; chat: number;
             response={turn.text}
             library={library}
             isStreaming={turn.phase === "streaming"}
+            onAction={(event) => {
+              // A pick in a card, a choice or a board: the next question in this chat (Swift sends it to Pi).
+              const params = (event.params ?? {}) as Record<string, unknown>;
+              post({ type: "pick", turn: turn.id, message: event.humanFriendlyMessage, context: params });
+            }}
             onError={(errors) => {
               renderErrors.current = errors;
             }}
@@ -72,8 +78,15 @@ function TurnView({ turn, chat, first, last, refs }: { turn: Turn; chat: number;
 
 export function App() {
   const s = useThread();
+  // What each block led to: the later turns asked by picking in it.
+  const picks = React.useMemo(() => {
+    const picked = new Map<string, Via[]>();
+    for (const turn of s.turns) if (turn.via) picked.set(`${turn.via.turn}:${turn.via.block}`, [...(picked.get(`${turn.via.turn}:${turn.via.block}`) ?? []), turn.via]);
+    return { picked, busy: s.busy };
+  }, [s.turns, s.busy]);
   return (
     <RefsContext.Provider value={s.refs}>
+      <PicksContext.Provider value={picks}>
       <SelectedContext.Provider value={s.selected}>
         <main className="g-page" key={s.chat}>
           {s.turns.map((turn, i) => (
@@ -81,6 +94,7 @@ export function App() {
           ))}
         </main>
       </SelectedContext.Provider>
+      </PicksContext.Provider>
     </RefsContext.Provider>
   );
 }

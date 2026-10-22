@@ -15,6 +15,10 @@ and points it at your code, in one Ask window:
    colour, each hand-off is the edge two pieces share, labelled with what crosses it, and the code you'd still have to
    write is an empty piece in the gap. Click a piece and your editor opens at its line. The model only picks the
    pieces and says how they fit; Gafitas draws them, so a small local model can explain as clearly as a frontier one.
+   Other questions get other pictures, not paragraphs: a walk through the real lines, two places side by side, what
+   in one repo matches what in another (and how sure that is), two or three ways to do it, a question with icon tiles
+   to pick from, or a board of what you have, what's missing and what to decide. Click a way or a tile and that's
+   your next question.
 3. **Keep going.** Every question is a chat, kept on this Mac: reopen any of them at once, or keep asking. While Pi
    works you see what it's doing: what it dug up, each file it reads, what it's thinking.
 

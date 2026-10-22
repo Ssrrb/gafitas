@@ -18,9 +18,17 @@ export interface Trail {
   thinking?: string;
 }
 
+/** A turn asked by picking in an earlier one: which turn, which block, what was chosen. */
+export interface Via {
+  turn: string;
+  block: string;
+  choices: string[];
+}
+
 export interface Turn {
   id: string;
   question: string;
+  via?: Via;
   text: string;
   phase: Phase;
   /** Bumped whenever the program text is replaced wholesale (repair turn). */
@@ -42,6 +50,8 @@ export interface ThreadState {
   turns: Turn[];
   /** The native selection: light the piece citing this ref. */
   selected: string | null;
+  /** Pi is answering: nothing on the page may send another question. */
+  busy: boolean;
 }
 
 export const newTurn = (id: string, question = "", patch: Partial<Turn> = {}): Turn => ({
@@ -58,7 +68,7 @@ export const newTurn = (id: string, question = "", patch: Partial<Turn> = {}): T
   ...patch,
 });
 
-let state: ThreadState = { chat: 0, refs: new Map(), turns: [], selected: null };
+let state: ThreadState = { chat: 0, refs: new Map(), turns: [], selected: null, busy: false };
 const listeners = new Set<() => void>();
 let queued = 0;
 let queuedOnTimer = false;
@@ -123,7 +133,7 @@ export const store = {
   },
   reset() {
     // A new chat brings its own refs: never let an old table vouch for a new program.
-    state = { chat: state.chat + 1, refs: new Map(), turns: [], selected: null };
+    state = { chat: state.chat + 1, refs: new Map(), turns: [], selected: null, busy: state.busy };
     flushNow();
   },
 };
@@ -134,8 +144,16 @@ export function useThread() {
 
 export const RefsContext = React.createContext<ReadonlyMap<string, RefEntry>>(new Map());
 export const SelectedContext = React.createContext<string | null>(null);
-/** Which turn a block belongs to, so a figure plays its entrance once per answer (and never when replayed). */
-export const TurnContext = React.createContext<{ key: string; replay: boolean }>({ key: "", replay: false });
+/** Which turn a block belongs to, so a figure plays its entrance once per answer (and never when replayed); `live`
+ * while it still streams. */
+export const TurnContext = React.createContext<{ key: string; id: string; replay: boolean; live: boolean }>({ key: "", id: "", replay: false, live: false });
+
+/** What was picked from each block so far, by "turn:block", from the later turns' `via`; and whether Pi is busy. */
+export const PicksContext = React.createContext<{ picked: ReadonlyMap<string, Via[]>; busy: boolean }>({ picked: new Map(), busy: false });
+
+export function usePicks() {
+  return React.useContext(PicksContext);
+}
 
 export function useRefs() {
   return React.useContext(RefsContext);

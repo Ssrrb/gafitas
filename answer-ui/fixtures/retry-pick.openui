@@ -1,0 +1,7 @@
+root = Answer("Antes de elegir dónde, conviene saber qué quieres reintentar: requests y urllib3 lo resuelven en sitios distintos.", [p0, t1])
+o1 = Option("Errores de conexión", "plug", "Se cae la red o el host")
+o2 = Option("Respuestas 5xx", "server", "El servidor falla un momento")
+o3 = Option("Límites de uso", "gauge", "Respetar Retry-After")
+o4 = Option("Solo peticiones GET", "shield", "Nada que cambie datos")
+p0 = Pick("¿Qué quieres que se reintente?", [o1, o2, o3, o4], true)
+t1 = Text("Cada caso se configura en el `Retry` que HTTPAdapter le pasa a urllib3.")

@@ -1,7 +1,8 @@
-// The small blocks: Snippet, Callout, Compare, Check, Text.
+// The small blocks: Snippet, Callout, Check, Text.
 import * as React from "react";
+import { useTriggerAction } from "@openuidev/react-lang";
 import { linesOf, resolveRef } from "../refs";
-import { useRefs, useSelected } from "../store";
+import { TurnContext, usePicks, useRefs, useSelected } from "../store";
 import { notQuite, S } from "../strings";
 import { hoverRef, openRef, RefChip } from "./RefChip";
 
@@ -63,39 +64,11 @@ export function CalloutBlock({ kind, text }: { kind: string; text: string }) {
   );
 }
 
-export interface SideProps {
-  title?: string;
-  ref?: string;
-  points?: string[];
-}
-
-export function CompareBlock({ left, right }: { left?: SideProps; right?: SideProps }) {
-  const side = (s: SideProps | undefined, which: string) =>
-    s ? (
-      <section className="g-side" aria-label={s.title}>
-        <h3>{s.title}</h3>
-        {s.ref ? <RefChip cite={s.ref} /> : null}
-        <ul>
-          {(s.points ?? []).slice(0, 4).map((point, i) => (
-            <li key={i}>
-              <Inline md={point} />
-            </li>
-          ))}
-        </ul>
-      </section>
-    ) : (
-      <section className="g-side" key={which} />
-    );
-  return (
-    <div className="g-compare">
-      {side(left, "left")}
-      {side(right, "right")}
-    </div>
-  );
-}
-
-export function CheckBlock({ question, options, answer, why }: { question: string; options: string[]; answer: number; why: string }) {
+export function CheckBlock({ question, options, answer, why, statementId }: { question: string; options: string[]; answer: number; why: string; statementId?: string }) {
   const [chosen, setChosen] = React.useState<number | null>(null);
+  const trigger = useTriggerAction();
+  const turn = React.useContext(TurnContext);
+  const { busy } = usePicks();
   const right = Number(answer);
   const id = React.useId();
   return (
@@ -126,6 +99,20 @@ export function CheckBlock({ question, options, answer, why }: { question: strin
           </>
         )}
       </p>
+      {chosen !== null && chosen !== right && !busy && !turn.live ? (
+        <button
+          type="button"
+          className="g-button"
+          onClick={() =>
+            void trigger(`Explícame por qué la respuesta a «${question}» es «${options[right - 1] ?? right}».`, undefined, {
+              type: "continue_conversation",
+              params: { kind: "check", block: statementId, choices: [String(chosen)] },
+            })
+          }
+        >
+          {S.explain}
+        </button>
+      ) : null}
     </section>
   );
 }

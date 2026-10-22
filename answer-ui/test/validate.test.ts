@@ -40,7 +40,7 @@ describe("validate", () => {
     // A long label is guidance, not an error: the page clamps it, and the joint stays.
     expect(check(base.replace('"conn, method, url, body, headers"', '"' + "x".repeat(60) + '"'))).toEqual([]);
     expect(check(base.replace('p4 = Piece("HTTPConnectionPool._make_request", "r4", "method")', 'p4 = Piece("HTTPConnectionPool._make_request", "r3:782", "method")'))).toContainEqual({ id: "p4", message: expect.stringContaining("same lines as p3") });
-    expect(check(base.replace("[z1, t1]", "[z1, z2, t1]") + '\nz2 = Puzzle("Otra", [p1, p2], [j1], [s1])')).toContainEqual({ id: "z2", message: expect.stringContaining("At most 1 Puzzle") });
+    expect(check(base.replace("[z1, k1]", "[z1, z2, k1]") + '\nz2 = Puzzle("Otra", [p1, p2], [j1], [s1])')).toContainEqual({ id: "z2", message: expect.stringContaining("At most 1 Puzzle") });
     const newPiece = base.replace('p4 = Piece("HTTPConnectionPool._make_request", "r4", "method")', 'p4 = NewPiece("TimedPool", "httpx", "x.py", "", "Mide")');
     expect(check(newPiece)).toContainEqual({ id: "p4", message: expect.stringContaining("one of: requests, urllib3") });
     expect(validateProgram(base, new Map())).toContainEqual({ id: "p1", message: expect.stringContaining("every piece is an Idea") });
@@ -81,5 +81,37 @@ describe("validate", () => {
     expect(kept).not.toContain("z1 =");
     expect(kept).toContain("t1 = Snippet(");
     expect(validateProgram(kept, refs)).toEqual([]);
+  });
+});
+
+describe("validate: the blocks a reader picks from", () => {
+  const refs = refsFor("retry-ways");
+
+  it("passes the choice fixtures", () => {
+    for (const name of ["retry-ways", "retry-pick", "retry-board"]) expect(validateProgram(fixture(name), refsFor(name)), name).toEqual([]);
+    expect(validateProgram(fixture("board-norefs"), new Map())).toEqual([]);
+  });
+
+  it("asks for a repair of what the page draws around, and drops only what it can't stand behind", () => {
+    const errors = validateProgram(fixture("broken-choices"), refs);
+    const soft = errors.filter((e) => e.soft).map((e) => e.id).sort();
+    const hard = errors.filter((e) => !e.soft).map((e) => e.id).sort();
+    expect(soft).toEqual(["w1", "w3"]);
+    expect(hard).toEqual(["w2"]);
+    expect(errors.find((e) => e.id === "w2")!.message).toContain("3 archivos");
+    const merged = mergeStatements(fixture("broken-choices"), fixture("broken-choices.repair"), "root");
+    const left = validateProgram(merged, refs);
+    expect(left.map((e) => e.id)).toEqual(["w2"]);
+    const kept = pruneBroken(merged, left);
+    expect(kept).not.toMatch(/^w2 =/m);
+    expect(kept).toContain("[w1, w3]");
+    expect(validateProgram(kept, refs)).toEqual([]);
+  });
+
+  it("a Board item under tienes needs its ref; one choice block per answer", () => {
+    const noRef = fixture("retry-board").replace('"plug", "r2:696-709"', '"plug", ""');
+    expect(validateProgram(noRef, refs)).toContainEqual({ id: "i1", message: expect.stringContaining("needs its ref") });
+    const two = fixture("retry-board").replace("[b0, n1])", "[b0, k1, n1])") + "\n" + fixture("retry-ways").split("\n").filter((l) => /^(w\d|k1) =/.test(l)).join("\n");
+    expect(validateProgram(two, refs)).toContainEqual({ id: "k1", message: expect.stringContaining("At most one of Ways, Pick and Board") });
   });
 });

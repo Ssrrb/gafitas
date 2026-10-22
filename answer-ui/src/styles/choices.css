@@ -1,0 +1,838 @@
+/* Blocks a reader picks from (Caminos, Elige, Tablero, Sigue con) and reads code with (Walkthrough, SideBySide,
+   Matches). Quiet panels with 1px edges; lime only on what is picked, lit or running; icons are plain muted glyphs.
+   Widths follow the answer column (container queries), not the window. */
+.g-answer {
+  container-type: inline-size;
+}
+
+.g-icon {
+  flex: none;
+  color: var(--g-muted);
+}
+
+.g-muted {
+  color: var(--g-muted);
+}
+
+.g-panel {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--g-edge);
+  border-radius: 12px;
+  background: var(--g-sheet);
+}
+
+fieldset.g-panel {
+  min-inline-size: 0;
+}
+
+.g-panel-title {
+  margin: 0 0 14px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.g-panel-foot {
+  margin: 12px 0 0;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+.g-button[aria-disabled="true"] {
+  color: var(--g-muted);
+  cursor: default;
+}
+
+.g-button[aria-disabled="true"]:hover {
+  background: var(--g-sheet);
+}
+
+.g-primary:not([aria-disabled="true"]) {
+  border-color: var(--g-text);
+  background: var(--g-text);
+  color: var(--g-sheet);
+}
+
+.g-primary:not([aria-disabled="true"]):hover {
+  background: color-mix(in srgb, var(--g-text) 85%, var(--g-sheet));
+}
+
+.g-picked {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--g-lit-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Caminos: one panel, the paths as columns split by rules, rows level across columns. */
+.g-ways-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--g-cols, 3), minmax(0, 1fr));
+  grid-template-rows: repeat(6, auto);
+  gap: 0;
+}
+
+.g-ways[data-count="2"] .g-ways-grid {
+  --g-cols: 2;
+}
+
+/* minmax(0, 1fr): without it, a long chip widens the way's own column past its share and its text runs into the next. */
+.g-way {
+  display: grid;
+  grid-row: span 6;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: subgrid;
+  gap: 8px;
+  padding: 0 16px;
+  border-left: 1px solid var(--g-edge);
+}
+
+.g-way:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.g-way:last-child {
+  padding-right: 0;
+}
+
+.g-way > * {
+  margin: 0;
+}
+
+.g-way-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.g-way-title .g-icon {
+  transform: translateY(3px);
+}
+
+.g-way-what,
+.g-way-tradeoff,
+.g-way-effort {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.g-way-what {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.g-way-label {
+  color: var(--g-muted);
+}
+
+.g-way-uses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 13px;
+}
+
+.g-way-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.g-way-chips > *,
+.g-board-near > * {
+  min-width: 0;
+}
+
+.g-way-act {
+  align-self: end;
+  padding-top: 4px;
+}
+
+@container (max-width: 699px) {
+  .g-ways[data-count="3"] .g-ways-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+
+  .g-ways[data-count="3"] .g-way {
+    grid-row: auto;
+    grid-template-rows: none;
+    padding: 14px 0;
+    border-left: 0;
+    border-top: 1px solid var(--g-edge);
+  }
+
+  .g-ways[data-count="3"] .g-way:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+}
+
+@container (max-width: 459px) {
+  .g-ways-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+
+  .g-way {
+    grid-row: auto;
+    grid-template-rows: none;
+    padding: 14px 0;
+    border-left: 0;
+    border-top: 1px solid var(--g-edge);
+  }
+
+  .g-way:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+}
+
+/* Elige: icon tiles over native radios or checkboxes. A legend sits on the fieldset's border unless it floats. */
+.g-pick .g-panel-title {
+  float: left;
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.g-pick-kind {
+  clear: both;
+}
+
+.g-pick-kind {
+  margin: 0 0 12px;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+.g-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@container (min-width: 700px) {
+  .g-pick-grid[data-count="3"],
+  .g-pick-grid[data-count="6"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 459px) {
+  .g-pick-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.g-pick-grid[data-count="5"] > :last-child {
+  grid-column: 1 / -1;
+}
+
+.g-tile-pick {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--g-edge);
+  border-radius: 8px;
+  background: var(--g-sheet);
+  cursor: pointer;
+}
+
+.g-tile-pick:hover {
+  background: var(--g-fill);
+}
+
+.g-tile-pick[data-on] {
+  border-color: var(--g-lit);
+  outline: 1px solid var(--g-lit);
+  outline-offset: -2px;
+}
+
+.g-tile-pick:has(:focus-visible) {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 1px;
+}
+
+.g-tile-pick-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.g-tile-pick-label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.g-tile-pick-note {
+  color: var(--g-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* The fill shows only in the content box, so the padding draws the ring between mark and dot. */
+.g-mark {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  padding: 2.5px;
+  background-clip: content-box;
+  border: 1.5px solid color-mix(in srgb, var(--g-text) 40%, var(--g-sheet));
+  border-radius: 50%;
+}
+
+.g-mark[data-kind="multiple"] {
+  border-radius: 4px;
+}
+
+.g-tile-pick[data-on] .g-mark {
+  border-color: var(--g-lit-ink);
+  background-color: var(--g-lit-ink);
+}
+
+.g-mark[data-kind="multiple"] {
+  padding: 2px;
+}
+
+.g-pick-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 14px;
+}
+
+.g-pick-preview {
+  flex: 1;
+  min-width: 0;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+/* Tablero: the puzzle box before it is put together. */
+.g-board-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@container (max-width: 699px) {
+  .g-board-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .g-board-col {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 8px;
+  }
+
+  .g-board-head,
+  .g-board-empty {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (max-width: 459px) {
+  .g-board-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.g-board-col {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.g-board-head {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.g-count {
+  margin-left: 4px;
+  color: var(--g-muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-board-empty {
+  margin: 0;
+  font-size: 13px;
+}
+
+.g-board-item {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.g-board-item > * {
+  margin: 0;
+}
+
+.g-board-item[data-column="tienes"] {
+  border: 1px solid color-mix(in srgb, var(--g-text) 22%, var(--g-sheet));
+  background: var(--g-p1-pale);
+}
+
+.g-board-item[data-column="tienes"][data-tint="2"] {
+  background: var(--g-p2-pale);
+}
+
+.g-board-item[data-column="tienes"][data-tint="3"] {
+  background: var(--g-p3-pale);
+}
+
+.g-board-item[data-column="tienes"][data-tint="4"] {
+  background: var(--g-p4-pale);
+}
+
+.g-board-item[data-column="falta"] {
+  border: 1.5px dashed color-mix(in srgb, var(--g-text) 45%, var(--g-sheet));
+  background: var(--g-sheet);
+}
+
+.g-board-item[data-column="decidir"] {
+  background: color-mix(in srgb, var(--g-text) 6%, var(--g-sheet));
+}
+
+.g-board-item[data-selected] {
+  outline: 2px solid var(--g-lit);
+  outline-offset: -2px;
+}
+
+.g-board-hit {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.g-board-hit:hover {
+  background: color-mix(in srgb, var(--g-text) 4%, transparent);
+}
+
+.g-board-hit:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 1px;
+}
+
+.g-board-hit[aria-disabled="true"] {
+  cursor: default;
+}
+
+.g-board-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.g-board-title .g-icon {
+  transform: translateY(3px);
+}
+
+.g-board-meta,
+.g-board-note,
+.g-board-ask,
+.g-board-near {
+  color: var(--g-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.g-board-meta {
+  font-variant-numeric: tabular-nums;
+}
+
+.g-board-near {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.g-board-ask {
+  color: var(--g-text);
+}
+
+.g-board-item[data-asked] .g-board-ask {
+  color: var(--g-lit-ink);
+}
+
+/* Sigue con. */
+.g-next {
+  margin-top: 4px;
+}
+
+.g-next ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-next-q {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.g-next-q:hover {
+  background: var(--g-hover);
+}
+
+.g-next-q:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 1px;
+}
+
+.g-next-q .g-icon {
+  transform: translateY(2px);
+}
+
+.g-next-q[data-asked] {
+  color: var(--g-muted);
+}
+
+.g-next-q[data-asked] .g-icon {
+  color: var(--g-lit-ink);
+}
+
+.g-next-q[aria-disabled="true"] {
+  color: var(--g-muted);
+  cursor: default;
+}
+
+/* Walkthrough. */
+.g-walk-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.g-step-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.g-code-learn {
+  margin: 0;
+}
+
+.g-code-learn .g-line {
+  border-left: 3px solid transparent;
+}
+
+.g-code-learn .g-line[data-focus] {
+  border-left-color: var(--g-lit);
+}
+
+.g-stop-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: var(--g-edge);
+  color: var(--g-muted);
+  font: 600 10px/1 var(--g-font);
+  vertical-align: 1px;
+}
+
+.g-stop-badge[data-current] {
+  background: var(--g-lit-ink);
+  color: var(--g-sheet);
+}
+
+.g-stop-say {
+  position: sticky;
+  left: 0;
+  display: block;
+  max-width: 100cqw;
+  padding: 6px 14px 8px calc(var(--g-gutter, 3ch) + 24px);
+  border-left: 3px solid var(--g-lit);
+  background: color-mix(in srgb, var(--g-lit) 10%, var(--g-fill));
+  color: var(--g-text);
+  font: 14px/1.45 var(--g-font);
+  white-space: normal;
+}
+
+.g-stop-file {
+  margin: 8px 8px 2px;
+  color: var(--g-muted);
+  font-size: 12px;
+}
+
+.g-walk-ask {
+  margin: 8px 8px 0;
+}
+
+/* SideBySide. */
+.g-sxs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.g-sxs-grid > .g-side {
+  min-width: 0;
+  padding: 0 0 0 16px;
+  border: 0;
+  border-left: 1px solid var(--g-edge);
+  border-radius: 0;
+}
+
+.g-sxs-grid > .g-side:first-child {
+  padding: 0 16px 0 0;
+  border-left: 0;
+}
+
+@container (max-width: 639px) {
+  .g-sxs-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .g-sxs-grid > .g-side,
+  .g-sxs-grid > .g-side:first-child {
+    padding: 0;
+    border-left: 0;
+  }
+}
+
+.g-sxs .g-code .g-line {
+  padding-left: calc(var(--g-gutter, 3ch) + 24px);
+  text-indent: calc(-1 * (var(--g-gutter, 3ch) + 24px));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.g-sxs .g-code code {
+  min-width: 0;
+}
+
+.g-side-repo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  color: var(--g-muted);
+  font-size: 12px;
+}
+
+.g-side-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.g-side-points {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+/* Matches: confidence drawn as the mark itself. Every row shares one set of columns (subgrid), so the links line up. */
+.g-matches {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr) auto;
+  column-gap: 8px;
+}
+
+.g-matches > * {
+  grid-column: 1 / -1;
+}
+
+.g-matches-cols,
+.g-matches-list,
+.g-match {
+  grid-template-columns: subgrid;
+}
+
+.g-matches-list {
+  display: grid;
+}
+
+.g-matches-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.g-matches-cols {
+  display: grid;
+  margin-bottom: 4px;
+  color: var(--g-muted);
+  font-size: 12px;
+}
+
+.g-matches-cols > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.g-matches-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-match {
+  display: grid;
+  grid-column: 1 / -1;
+  align-items: center;
+  row-gap: 4px;
+  min-height: 48px;
+  padding: 8px 0;
+  border-top: 1px solid var(--g-edge);
+}
+
+.g-match-a,
+.g-match-b {
+  min-width: 0;
+  font-size: 13px;
+}
+
+/* The word sits on the line, like a label on a connector. */
+.g-match-link {
+  display: grid;
+  place-items: center;
+}
+
+.g-match-link > * {
+  grid-area: 1 / 1;
+}
+
+.g-match-link svg {
+  width: 100%;
+}
+
+.g-match-word {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  background: var(--g-sheet);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.g-match[data-sure="segura"] .g-match-word {
+  color: var(--g-text);
+}
+
+.g-match[data-sure="probable"] .g-match-word,
+.g-match[data-sure="dudosa"] .g-match-word {
+  color: var(--g-muted);
+}
+
+.g-match[data-sure="dudosa"] .g-match-b .g-chip {
+  border-style: dashed;
+}
+
+.g-match-note {
+  grid-column: 1 / -1;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+.g-match-act {
+  justify-self: end;
+}
+
+.g-match[data-asked] .g-match-act {
+  color: var(--g-lit-ink);
+}
+
+.g-sure-mark line {
+  stroke: var(--g-text);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.g-sure-mark[data-sure="probable"] line {
+  stroke: var(--g-muted);
+  stroke-dasharray: 5 3;
+}
+
+.g-sure-mark[data-sure="dudosa"] line {
+  stroke: var(--g-muted);
+  stroke-dasharray: 1.5 3;
+}
+
+@container (max-width: 559px) {
+  .g-matches {
+    grid-template-columns: 1fr;
+  }
+
+  .g-matches-cols {
+    display: none;
+  }
+
+  .g-match {
+    justify-items: start;
+  }
+
+  .g-match-link {
+    width: 112px;
+  }
+
+  .g-match-act {
+    justify-self: start;
+  }
+}
+
+.g-side-title code {
+  font: 600 13px/1.35 var(--g-mono);
+}

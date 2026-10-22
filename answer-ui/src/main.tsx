@@ -7,6 +7,7 @@ import { post } from "./post";
 import "./styles/theme.css";
 import "./styles/page.css";
 import "./styles/puzzle.css";
+import "./styles/choices.css";
 import { whenDrawn } from "./store";
 
 installBridge();

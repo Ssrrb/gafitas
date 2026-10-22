@@ -16,6 +16,14 @@ struct ChatTurn: Codable, Equatable {
     var thinking: String
     /// "done", "stopped" or "failed: …".
     var outcome: String
+    /// Asked by picking in an earlier turn's block (Caminos, Elige, Tablero, Sigue con).
+    var via: Via? = nil
+
+    struct Via: Codable, Equatable {
+        var turn: String
+        var block: String
+        var choices: [String]
+    }
 
     struct TrailLine: Codable, Equatable {
         var text: String

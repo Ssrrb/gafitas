@@ -1,0 +1,6 @@
+root = Answer("Los reintentos ya viven en urllib3: lo más directo es dárselos a HTTPAdapter; también puedes envolver Session.send o tu propia llamada.", [k1, n1])
+w1 = Way("Montar un HTTPAdapter con Retry", "sync", "Crea un Retry de urllib3 con espera y pásalo como max_retries al HTTPAdapter que montas.", "bajo", "Solo reintenta lo que urllib3 sabe repetir sin riesgo.", ["r2:696-709", "r7"])
+w2 = Way("Envolver Session.send", "flow", "Una subclase de Session repite send con espera cuando la respuesta falla.", "medio", "Repites una lógica que urllib3 ya trae.", ["r1:784"])
+w3 = Way("Reintentar en tu propio código", "wrench", "Un decorador repite la llamada completa con espera exponencial.", "bajo", "No distingue un error de conexión de un error del servidor.")
+k1 = Ways("¿Dónde pongo los reintentos con espera?", [w1, w2, w3])
+n1 = Next(["¿Qué errores reintenta urllib3 por defecto?", "¿Cómo limito los reintentos a GET?", "¿Cómo veo cuántos reintentos hubo?"])

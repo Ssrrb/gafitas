@@ -3,14 +3,21 @@
 // ref check (the anti-hallucination rule) and the Puzzle's rules on top of the parser's own errors. The
 // messages go only to the model, in the repair turn, so they're English like the rest of its prompt.
 import { createParser, mergeStatements, type ElementNode } from "@openuidev/lang-core";
-import { BLOCKS, LIMITS, library, ROOT } from "./library";
+import { BIG_BLOCKS, BLOCKS, CHOICE_BLOCKS, LIMITS, MAX_BIG, library, ROOT } from "./library";
+import { sureOf } from "./components/Learn";
 import { readPuzzle } from "./puzzle/model";
+import { columnOf, effortOf } from "./components/Choices";
 import { resolveRef, type RefTable } from "./refs";
 
 export interface AnswerError {
   id: string;
   message: string;
+  /** Worth a repair, never worth dropping: the page already draws around it. */
+  soft?: true;
 }
+
+/** A model counting the user's code in words: a claim the page can't check, and the page counts for itself. */
+const COUNTED = /\b\d+\s+(módulos?|archivos?|funciones|función|clases?|lugares|tests?|pruebas?|tipos?|líneas?|proyectos?)\b/i;
 
 let parser: ReturnType<typeof createParser> | null = null;
 export const parseProgram = (text: string) => (parser ??= createParser(library.toJSONSchema(), ROOT)).parse(text);
@@ -102,6 +109,14 @@ export function validateProgram(text: string, refs: RefTable): AnswerError[] {
   if (!root) return errors;
   if (root.typeName !== ROOT) add("root", `root must be ${ROOT}(...), not ${root.typeName}(...).`);
 
+  const addSoft = (id: string | undefined, message: string) => {
+    if (!errors.some((e) => e.id === (id ?? "root") && e.message === message)) errors.push({ id: id ?? "root", message, soft: true });
+  };
+  const counted = (id: string, ...texts: unknown[]) => {
+    const hit = texts.map((t) => (typeof t === "string" ? COUNTED.exec(t) : null)).find(Boolean);
+    if (hit) add(id, `${id} counts the user's code ("${hit[0]}"); never count it in words: Gafitas counts from the refs.`);
+  };
+
   const refCheck = (id: string | undefined, what: string, value: unknown, allowEmpty = false) => {
     const text = typeof value === "string" ? value : "";
     if (!text.trim()) {
@@ -125,6 +140,11 @@ export function validateProgram(text: string, refs: RefTable): AnswerError[] {
     seen[type] = (seen[type] ?? 0) + 1;
     const limit = LIMITS[type as keyof typeof LIMITS];
     if (limit && seen[type]! > limit) add(id, `At most ${limit} ${type}${limit > 1 ? "s" : ""}; this one is not shown.`);
+    else if ((CHOICE_BLOCKS as readonly string[]).includes(type) && CHOICE_BLOCKS.some((other) => other !== type && seen[other])) {
+      add(id, "At most one of Ways, Pick and Board in an answer; this one is not shown.");
+    } else if ((BIG_BLOCKS as readonly string[]).includes(type) && BIG_BLOCKS.reduce((n, big) => n + (seen[big] ?? 0), 0) > MAX_BIG) {
+      add(id, `At most ${MAX_BIG} of ${BIG_BLOCKS.join(", ")} in an answer; this one is not shown.`);
+    }
     checkBlock(block, id);
   }
 
@@ -138,13 +158,117 @@ export function validateProgram(text: string, refs: RefTable): AnswerError[] {
       case "Snippet":
         refCheck(id, "Snippet", p.ref);
         break;
+      case "Walkthrough": {
+        const stops = (Array.isArray(p.stops) ? p.stops : []).filter(isElement);
+        if (stops.length < 2 || stops.length > 6) add(id, `Walkthrough needs 2 to 6 Lines(...) stops, not ${stops.length}.`);
+        const files = new Set<string>();
+        for (const stop of stops) {
+          const sid = stop.statementId ?? id;
+          if (stop.typeName !== "Lines") {
+            add(sid, `Walkthrough takes Lines(...) stops, not ${stop.typeName}.`);
+            continue;
+          }
+          const resolved = resolveRef(String(stop.props.ref ?? ""), refs);
+          if (!resolved.ok) add(sid, `${sid}: ref ${resolved.reason}. Cite only refs from the list.`);
+          else {
+            files.add(resolved.ref.entry.id);
+            if (resolved.ref.to - resolved.ref.from + 1 > 12) addSoft(sid, `${sid} lights ${resolved.ref.to - resolved.ref.from + 1} lines; a stop is 1 to 12 lines.`);
+          }
+        }
+        if (files.size > 2) add(id, `A Walkthrough reads one or two refs, not ${files.size}.`);
+        break;
+      }
+      case "SideBySide":
+        for (const side of [p.left, p.right]) {
+          if (!isElement(side)) continue;
+          if (side.typeName !== "Side") add(side.statementId ?? id, `SideBySide takes two Side(...) values, not ${side.typeName}.`);
+          else refCheck(side.statementId ?? id, "Side", side.props.ref);
+        }
+        break;
+      case "Matches": {
+        const pairsList = (Array.isArray(p.pairs) ? p.pairs : []).filter(isElement);
+        if (pairsList.length < 2 || pairsList.length > 8) add(id, `Matches needs 2 to 8 Match(...) pairs, not ${pairsList.length}.`);
+        const aRepos = new Set<string>();
+        const bRepos = new Set<string>();
+        for (const pair of pairsList) {
+          const mid = pair.statementId ?? id;
+          if (pair.typeName !== "Match") {
+            add(mid, `Matches takes Match(...) pairs, not ${pair.typeName}.`);
+            continue;
+          }
+          const a = resolveRef(String(pair.props.a ?? ""), refs);
+          if (!a.ok) add(mid, `${mid}'s a: ref ${a.reason}. Cite only refs from the list.`);
+          else aRepos.add(a.ref.entry.repo);
+          const bText = String(pair.props.b ?? "").trim();
+          if (bText) {
+            const b = resolveRef(bText, refs);
+            if (!b.ok) add(mid, `${mid}'s b: ref ${b.reason}. Cite only refs from the list, or "" when there is no equivalent.`);
+            else bRepos.add(b.ref.entry.repo);
+          }
+          if (sureOf(pair.props.sure) === "dudosa" && !/^(dudosa|unsure|dudoso)$/i.test(String(pair.props.sure ?? "").trim())) {
+            addSoft(mid, `${mid}'s sure is "segura", "probable" or "dudosa", not "${String(pair.props.sure ?? "")}".`);
+          }
+        }
+        if (aRepos.size > 1 || bRepos.size > 1 || [...aRepos].some((repo) => bRepos.has(repo))) {
+          add(id, "In Matches every a is in one repo and every b in another one.");
+        }
+        break;
+      }
       case "Compare":
+        addSoft(id, "Use SideBySide(title, left, right, note?) instead of Compare.");
         for (const side of [p.left, p.right]) {
           if (!isElement(side)) continue;
           if (side.typeName !== "Side") add(side.statementId ?? id, `Compare takes two Side(...) values, not ${side.typeName}.`);
           else refCheck(side.statementId ?? id, "Side", side.props.ref);
         }
         break;
+      case "Ways": {
+        const ways = (Array.isArray(p.ways) ? p.ways : []).filter(isElement);
+        if (ways.length < 2 || ways.length > 3) add(id, `Ways needs 2 or 3 Way(...) values, not ${ways.length}.`);
+        for (const way of ways) {
+          const wid = way.statementId ?? id;
+          if (way.typeName !== "Way") add(wid, `Ways takes Way(...) values, not ${way.typeName}.`);
+          if (!effortOf(way.props.effort)) addSoft(wid, `${wid}'s effort is "bajo", "medio" or "alto", not "${String(way.props.effort ?? "")}".`);
+          for (const cite of Array.isArray(way.props.uses) ? way.props.uses : []) {
+            const resolved = resolveRef(String(cite), refs);
+            if (!resolved.ok) addSoft(wid, `${wid} uses ${String(cite)}: ref ${resolved.reason}. Cite only refs from the list.`);
+          }
+          counted(wid, way.props.title, way.props.what, way.props.tradeoff);
+        }
+        break;
+      }
+      case "Pick": {
+        const options = (Array.isArray(p.options) ? p.options : []).filter(isElement);
+        if (options.length < 3 || options.length > 6) add(id, `Pick needs 3 to 6 Option(...) values, not ${options.length}.`);
+        for (const option of options) if (option.typeName !== "Option") add(option.statementId ?? id, `Pick takes Option(...) values, not ${option.typeName}.`);
+        break;
+      }
+      case "Board": {
+        const items = (Array.isArray(p.items) ? p.items : []).filter(isElement);
+        if (items.length < 3 || items.length > 9) add(id, `Board needs 3 to 9 Item(...) values, not ${items.length}.`);
+        for (const item of items) {
+          const iid = item.statementId ?? id;
+          if (item.typeName !== "Item") {
+            add(iid, `Board takes Item(...) values, not ${item.typeName}.`);
+            continue;
+          }
+          const column = columnOf(item.props.column);
+          const ref = typeof item.props.ref === "string" ? item.props.ref.trim() : "";
+          if (!column) addSoft(iid, `${iid}'s column is "tienes", "falta" or "decidir", not "${String(item.props.column ?? "")}".`);
+          if (column === "tienes" && !ref) add(iid, `${iid} is under "tienes", so it exists in the code and needs its ref; if it isn't written yet, put it under "falta".`);
+          if (ref) {
+            const resolved = resolveRef(ref, refs);
+            if (!resolved.ok) (column === "tienes" ? add : addSoft)(iid, `${iid}: ref ${resolved.reason}. Cite only refs from the list.`);
+          }
+          counted(iid, item.props.title, item.props.note);
+        }
+        break;
+      }
+      case "Next": {
+        const questions = Array.isArray(p.questions) ? p.questions : [];
+        if (questions.length < 2 || questions.length > 3) addSoft(id, `Next has 2 or 3 questions, not ${questions.length}.`);
+        break;
+      }
       case "Check": {
         const options = Array.isArray(p.options) ? p.options : [];
         if (options.length !== 3) add(id, `Check needs exactly 3 options, not ${options.length}.`);
@@ -187,10 +311,13 @@ export function pruneBroken(text: string, errors: AnswerError[]): string {
   const byId = new Map(statements.map((s) => [s.id, s]));
   const kind = new Map(statements.map((s) => [s.id, /^\s*([A-Za-z_$][\w$]*)\s*\(/.exec(s.rhs)?.[1] ?? ""]));
   const uses = new Map(statements.map((s) => [s.id, [...words(s.rhs)].filter((w) => byId.has(w) && w !== s.id)]));
-  const containers = new Set(["Answer", "Puzzle"]);
+  // What a container needs left in each of its lists to stay: a Puzzle 2 pieces and a joint, a choice 2 entries.
+  const keeps: Record<string, number[]> = { Answer: [], Puzzle: [2, 1], Ways: [2], Pick: [2], Board: [2], Walkthrough: [2], Matches: [2] };
+  const containers = new Set(Object.keys(keeps));
   const drop = new Set<string>();
   const dropLines = new Set<number>();
   for (const error of errors) {
+    if (error.soft) continue;
     const stray = /^line (\d+)$/.exec(error.id);
     if (stray) dropLines.add(Number(stray[1]));
     else if (error.id !== "root" && byId.has(error.id)) drop.add(error.id);
@@ -208,9 +335,10 @@ export function pruneBroken(text: string, errors: AnswerError[]): string {
       const next = dropFromLists(rhs.get(s.id)!, drop);
       rhs.set(s.id, next);
       uses.set(s.id, [...words(next)].filter((w) => byId.has(w) && w !== s.id));
-      if (kind.get(s.id) === "Puzzle") {
-        const [pieces = [], joints = []] = listsOf(next);
-        if (pieces.length < 2 || joints.length < 1) {
+      const need = keeps[kind.get(s.id) ?? ""] ?? [];
+      if (need.length) {
+        const lists = listsOf(next);
+        if (need.some((min, i) => (lists[i] ?? []).length < min)) {
           drop.add(s.id);
           changed = true;
         }

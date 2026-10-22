@@ -676,5 +676,401 @@
    "text": "from typing import Awaitable, Callable, TypedDict\n\n\nclass Tool(TypedDict):\n    name: str\n    description: str\n    handler: Callable[..., Awaitable[str]]",
    "tint": 1
   }
+ ],
+ "retry-ways": [
+  {
+   "id": "r1",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 752,
+   "last": 791,
+   "focus": 784,
+   "summary": "en Session.send",
+   "text": "    def send(self, request: PreparedRequest, **kwargs: Any) -> Response:\n        \"\"\"Send a given PreparedRequest.\n\n        :rtype: requests.Response\n        \"\"\"\n        # Set defaults that the hooks can utilize to ensure they always have\n        # the correct parameters to reproduce the previous request.\n        kwargs.setdefault(\"stream\", self.stream)\n        kwargs.setdefault(\"verify\", self.verify)\n        kwargs.setdefault(\"cert\", self.cert)\n        if \"proxies\" not in kwargs:\n            kwargs[\"proxies\"] = resolve_proxies(request, self.proxies, self.trust_env)\n\n        # It's possible that users might accidentally send a Request object.\n        # Guard against that specific failure case.\n        if isinstance(request, Request):\n            raise ValueError(\"You can only send PreparedRequests.\")\n\n        assert _is_prepared(request)\n\n        # Set up variables needed for resolve_redirects and dispatching of hooks\n        allow_redirects = kwargs.pop(\"allow_redirects\", True)\n        stream = kwargs.get(\"stream\")\n        hooks = request.hooks\n\n        # Get the appropriate adapter to use\n        adapter = self.get_adapter(url=request.url)\n\n        # Start time (approximately) of the request\n        start = preferred_clock()\n\n        # Send the request\n        r = adapter.send(request, **kwargs)\n\n        # Total elapsed time of the request (approximately)\n        elapsed = preferred_clock() - start\n        r.elapsed = timedelta(seconds=elapsed)\n\n        # Response manipulation hooks\n        r = dispatch_hook(\"response\", hooks, r, **kwargs)",
+   "tint": 0
+  },
+  {
+   "id": "r2",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 681,
+   "last": 720,
+   "focus": 696,
+   "summary": "en HTTPAdapter.send",
+   "text": "        if isinstance(timeout, tuple):\n            try:\n                connect, read = timeout\n                resolved_timeout = TimeoutSauce(connect=connect, read=read)\n            except ValueError:\n                raise ValueError(\n                    f\"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, \"\n                    f\"or a single float to set both timeouts to the same value.\"\n                )\n        elif isinstance(timeout, TimeoutSauce):\n            resolved_timeout = timeout\n        else:\n            resolved_timeout = TimeoutSauce(connect=timeout, read=timeout)\n\n        try:\n            resp = conn.urlopen(\n                method=request.method,\n                url=url,\n                body=request.body,  # type: ignore[arg-type]  # urllib3 stubs don't accept Iterable[bytes | str]\n                headers=request.headers,  # type: ignore[arg-type]  # urllib3#3072\n                redirect=False,\n                assert_same_host=False,\n                preload_content=False,\n                decode_content=False,\n                retries=self.max_retries,\n                timeout=resolved_timeout,\n                chunked=chunked,\n            )\n\n        except (ProtocolError, OSError) as err:\n            raise ConnectionError(err, request=request)\n\n        except MaxRetryError as e:\n            if isinstance(e.reason, ConnectTimeoutError):\n                # TODO: Remove this in 3.0.0: see #2811\n                if not isinstance(e.reason, NewConnectionError):\n                    raise ConnectTimeout(e, request=request)\n\n            if isinstance(e.reason, ResponseError):\n                raise RetryError(e, request=request)",
+   "tint": 0
+  },
+  {
+   "id": "r3",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 762,
+   "last": 801,
+   "focus": 782,
+   "summary": "en HTTPConnectionPool.urlopen",
+   "text": "            conn = self._get_conn(timeout=pool_timeout)\n            conn.timeout = timeout_obj.connect_timeout  # type: ignore[assignment]\n\n            # Is this a closed/new connection that requires CONNECT tunnelling?\n            if self.proxy is not None and http_tunnel_required and conn.is_closed:\n                try:\n                    self._prepare_proxy(conn)\n                except (BaseSSLError, OSError, SocketTimeout) as e:\n                    self._raise_timeout(\n                        err=e, url=self.proxy.url, timeout_value=conn.timeout\n                    )\n                    raise\n\n            # If we're going to release the connection in ``finally:``, then\n            # the response doesn't need to know about the connection. Otherwise\n            # it will also try to release it and we'll have a double-release\n            # mess.\n            response_conn = conn if not release_conn else None\n\n            # Make the request on the HTTPConnection object\n            response = self._make_request(\n                conn,\n                method,\n                url,\n                timeout=timeout_obj,\n                body=body,\n                headers=headers,\n                chunked=chunked,\n                retries=retries,\n                response_conn=response_conn,\n                preload_content=preload_content,\n                decode_content=decode_content,\n                **response_kw,\n            )\n\n            # Everything went great!\n            clean_exit = True\n\n        except EmptyPoolError:\n            # Didn't get a connection from the pool, no need to clean up",
+   "tint": 1
+  },
+  {
+   "id": "r4",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 383,
+   "last": 422,
+   "focus": 383,
+   "summary": "en HTTPConnectionPool._make_request",
+   "text": "    def _make_request(\n        self,\n        conn: BaseHTTPConnection,\n        method: str,\n        url: str,\n        body: _TYPE_BODY | None = None,\n        headers: typing.Mapping[str, str] | None = None,\n        retries: Retry | None = None,\n        timeout: _TYPE_TIMEOUT = _DEFAULT_TIMEOUT,\n        chunked: bool = False,\n        response_conn: BaseHTTPConnection | None = None,\n        preload_content: bool = True,\n        decode_content: bool = True,\n        enforce_content_length: bool = True,\n    ) -> BaseHTTPResponse:\n        \"\"\"\n        Perform a request on a given urllib connection object taken from our\n        pool.\n\n        :param conn:\n            a connection from one of our connection pools\n\n        :param method:\n            HTTP request method (such as GET, POST, PUT, etc.)\n\n        :param url:\n            The URL to perform the request on.\n\n        :param body:\n            Data to send in the request body, either :class:`str`, :class:`bytes`,\n            an iterable of :class:`str`/:class:`bytes`, or a file-like object.\n\n        :param headers:\n            Dictionary of custom headers to send, such as User-Agent,\n            If-None-Match, etc. If None, pool headers are used. If provided,\n            these headers completely replace any pool-specific headers.\n\n        :param retries:\n            Configure the number of retries to allow before raising a\n            :class:`~urllib3.exceptions.MaxRetryError` exception.",
+   "tint": 1
+  },
+  {
+   "id": "r5",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 470,
+   "last": 509,
+   "focus": 506,
+   "summary": "en HTTPAdapter.get_connection_with_tls_context",
+   "text": "            Either a boolean, in which case it controls whether we verify the\n            server's TLS certificate, or a string, in which case it must be a\n            path to a CA bundle to use.\n        :param proxies:\n            (optional) The proxies dictionary to apply to the request.\n        :param cert:\n            (optional) Any user-provided SSL certificate to be used for client\n            authentication (a.k.a., mTLS).\n        :rtype:\n            urllib3.HTTPConnectionPool\n        \"\"\"\n        assert _is_prepared(request)\n\n        proxy = select_proxy(request.url, proxies)\n        try:\n            host_params, pool_kwargs = self.build_connection_pool_key_attributes(\n                request,\n                verify,\n                cert,\n            )\n        except ValueError as e:\n            raise InvalidURL(e, request=request)\n        if proxy:\n            proxy = prepend_scheme_if_needed(proxy, \"http\")\n            proxy_url = parse_url(proxy)\n            if not proxy_url.host:\n                raise InvalidProxyURL(\n                    \"Please check proxy URL. It is malformed \"\n                    \"and could be missing the host.\"\n                )\n            proxy_manager = self.proxy_manager_for(proxy)\n            conn = proxy_manager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n        else:\n            # Only scheme should be lower case\n            conn = self.poolmanager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n",
+   "tint": 0
+  },
+  {
+   "id": "r6",
+   "repo": "urllib3",
+   "path": "src/urllib3/poolmanager.py",
+   "first": 303,
+   "last": 342,
+   "focus": 303,
+   "summary": "en PoolManager.connection_from_host",
+   "text": "    def connection_from_host(\n        self,\n        host: str | None,\n        port: int | None = None,\n        scheme: str | None = \"http\",\n        pool_kwargs: dict[str, typing.Any] | None = None,\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the host, port, and scheme.\n\n        If ``port`` isn't given, it will be derived from the ``scheme`` using\n        ``urllib3.connectionpool.port_by_scheme``. If ``pool_kwargs`` is\n        provided, it is merged with the instance's ``connection_pool_kw``\n        variable and used to create the new connection pool, if one is\n        needed.\n        \"\"\"\n\n        if not host:\n            raise LocationValueError(\"No host specified.\")\n\n        request_context = self._merge_pool_kwargs(pool_kwargs)\n        request_context[\"scheme\"] = scheme or \"http\"\n        if port is None:\n            port = port_by_scheme.get(request_context[\"scheme\"].lower(), 80)\n        request_context[\"port\"] = port\n        request_context[\"host\"] = host\n\n        return self.connection_from_context(request_context)\n\n    def connection_from_context(\n        self, request_context: dict[str, typing.Any]\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the request context.\n\n        ``request_context`` must at least contain the ``scheme`` key and its\n        value must be a key in ``key_fn_by_scheme`` instance variable.\n        \"\"\"\n        if \"strict\" in request_context:\n            warnings.warn(",
+   "tint": 1
+  },
+  {
+   "id": "r7",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 870,
+   "last": 909,
+   "focus": 870,
+   "summary": "en Session.get_adapter",
+   "text": "    def get_adapter(self, url: str) -> BaseAdapter:\n        \"\"\"\n        Returns the appropriate connection adapter for the given URL.\n\n        :rtype: requests.adapters.BaseAdapter\n        \"\"\"\n        for prefix, adapter in self.adapters.items():\n            if url.lower().startswith(prefix.lower()):\n                return adapter\n\n        # Nothing matches :-/\n        raise InvalidSchema(f\"No connection adapters were found for {url!r}\")\n\n    def close(self) -> None:\n        \"\"\"Closes all adapters and as such the session\"\"\"\n        for v in self.adapters.values():\n            v.close()\n\n    def mount(self, prefix: str, adapter: BaseAdapter) -> None:\n        \"\"\"Registers a connection adapter to a prefix.\n\n        Adapters are sorted in descending order by prefix length.\n        \"\"\"\n        self.adapters[prefix] = adapter\n        keys_to_move = [k for k in self.adapters if len(k) < len(prefix)]\n\n        for key in keys_to_move:\n            self.adapters[key] = self.adapters.pop(key)\n\n    def __getstate__(self) -> dict[str, Any]:\n        state = {attr: getattr(self, attr, None) for attr in self.__attrs__}\n        return state\n\n    def __setstate__(self, state: dict[str, Any]) -> None:\n        for attr, value in state.items():\n            setattr(self, attr, value)\n\n\ndef session() -> Session:\n    \"\"\"",
+   "tint": 0
+  }
+ ],
+ "retry-pick": [
+  {
+   "id": "r1",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 752,
+   "last": 791,
+   "focus": 784,
+   "summary": "en Session.send",
+   "text": "    def send(self, request: PreparedRequest, **kwargs: Any) -> Response:\n        \"\"\"Send a given PreparedRequest.\n\n        :rtype: requests.Response\n        \"\"\"\n        # Set defaults that the hooks can utilize to ensure they always have\n        # the correct parameters to reproduce the previous request.\n        kwargs.setdefault(\"stream\", self.stream)\n        kwargs.setdefault(\"verify\", self.verify)\n        kwargs.setdefault(\"cert\", self.cert)\n        if \"proxies\" not in kwargs:\n            kwargs[\"proxies\"] = resolve_proxies(request, self.proxies, self.trust_env)\n\n        # It's possible that users might accidentally send a Request object.\n        # Guard against that specific failure case.\n        if isinstance(request, Request):\n            raise ValueError(\"You can only send PreparedRequests.\")\n\n        assert _is_prepared(request)\n\n        # Set up variables needed for resolve_redirects and dispatching of hooks\n        allow_redirects = kwargs.pop(\"allow_redirects\", True)\n        stream = kwargs.get(\"stream\")\n        hooks = request.hooks\n\n        # Get the appropriate adapter to use\n        adapter = self.get_adapter(url=request.url)\n\n        # Start time (approximately) of the request\n        start = preferred_clock()\n\n        # Send the request\n        r = adapter.send(request, **kwargs)\n\n        # Total elapsed time of the request (approximately)\n        elapsed = preferred_clock() - start\n        r.elapsed = timedelta(seconds=elapsed)\n\n        # Response manipulation hooks\n        r = dispatch_hook(\"response\", hooks, r, **kwargs)",
+   "tint": 0
+  },
+  {
+   "id": "r2",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 681,
+   "last": 720,
+   "focus": 696,
+   "summary": "en HTTPAdapter.send",
+   "text": "        if isinstance(timeout, tuple):\n            try:\n                connect, read = timeout\n                resolved_timeout = TimeoutSauce(connect=connect, read=read)\n            except ValueError:\n                raise ValueError(\n                    f\"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, \"\n                    f\"or a single float to set both timeouts to the same value.\"\n                )\n        elif isinstance(timeout, TimeoutSauce):\n            resolved_timeout = timeout\n        else:\n            resolved_timeout = TimeoutSauce(connect=timeout, read=timeout)\n\n        try:\n            resp = conn.urlopen(\n                method=request.method,\n                url=url,\n                body=request.body,  # type: ignore[arg-type]  # urllib3 stubs don't accept Iterable[bytes | str]\n                headers=request.headers,  # type: ignore[arg-type]  # urllib3#3072\n                redirect=False,\n                assert_same_host=False,\n                preload_content=False,\n                decode_content=False,\n                retries=self.max_retries,\n                timeout=resolved_timeout,\n                chunked=chunked,\n            )\n\n        except (ProtocolError, OSError) as err:\n            raise ConnectionError(err, request=request)\n\n        except MaxRetryError as e:\n            if isinstance(e.reason, ConnectTimeoutError):\n                # TODO: Remove this in 3.0.0: see #2811\n                if not isinstance(e.reason, NewConnectionError):\n                    raise ConnectTimeout(e, request=request)\n\n            if isinstance(e.reason, ResponseError):\n                raise RetryError(e, request=request)",
+   "tint": 0
+  },
+  {
+   "id": "r3",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 762,
+   "last": 801,
+   "focus": 782,
+   "summary": "en HTTPConnectionPool.urlopen",
+   "text": "            conn = self._get_conn(timeout=pool_timeout)\n            conn.timeout = timeout_obj.connect_timeout  # type: ignore[assignment]\n\n            # Is this a closed/new connection that requires CONNECT tunnelling?\n            if self.proxy is not None and http_tunnel_required and conn.is_closed:\n                try:\n                    self._prepare_proxy(conn)\n                except (BaseSSLError, OSError, SocketTimeout) as e:\n                    self._raise_timeout(\n                        err=e, url=self.proxy.url, timeout_value=conn.timeout\n                    )\n                    raise\n\n            # If we're going to release the connection in ``finally:``, then\n            # the response doesn't need to know about the connection. Otherwise\n            # it will also try to release it and we'll have a double-release\n            # mess.\n            response_conn = conn if not release_conn else None\n\n            # Make the request on the HTTPConnection object\n            response = self._make_request(\n                conn,\n                method,\n                url,\n                timeout=timeout_obj,\n                body=body,\n                headers=headers,\n                chunked=chunked,\n                retries=retries,\n                response_conn=response_conn,\n                preload_content=preload_content,\n                decode_content=decode_content,\n                **response_kw,\n            )\n\n            # Everything went great!\n            clean_exit = True\n\n        except EmptyPoolError:\n            # Didn't get a connection from the pool, no need to clean up",
+   "tint": 1
+  },
+  {
+   "id": "r4",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 383,
+   "last": 422,
+   "focus": 383,
+   "summary": "en HTTPConnectionPool._make_request",
+   "text": "    def _make_request(\n        self,\n        conn: BaseHTTPConnection,\n        method: str,\n        url: str,\n        body: _TYPE_BODY | None = None,\n        headers: typing.Mapping[str, str] | None = None,\n        retries: Retry | None = None,\n        timeout: _TYPE_TIMEOUT = _DEFAULT_TIMEOUT,\n        chunked: bool = False,\n        response_conn: BaseHTTPConnection | None = None,\n        preload_content: bool = True,\n        decode_content: bool = True,\n        enforce_content_length: bool = True,\n    ) -> BaseHTTPResponse:\n        \"\"\"\n        Perform a request on a given urllib connection object taken from our\n        pool.\n\n        :param conn:\n            a connection from one of our connection pools\n\n        :param method:\n            HTTP request method (such as GET, POST, PUT, etc.)\n\n        :param url:\n            The URL to perform the request on.\n\n        :param body:\n            Data to send in the request body, either :class:`str`, :class:`bytes`,\n            an iterable of :class:`str`/:class:`bytes`, or a file-like object.\n\n        :param headers:\n            Dictionary of custom headers to send, such as User-Agent,\n            If-None-Match, etc. If None, pool headers are used. If provided,\n            these headers completely replace any pool-specific headers.\n\n        :param retries:\n            Configure the number of retries to allow before raising a\n            :class:`~urllib3.exceptions.MaxRetryError` exception.",
+   "tint": 1
+  },
+  {
+   "id": "r5",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 470,
+   "last": 509,
+   "focus": 506,
+   "summary": "en HTTPAdapter.get_connection_with_tls_context",
+   "text": "            Either a boolean, in which case it controls whether we verify the\n            server's TLS certificate, or a string, in which case it must be a\n            path to a CA bundle to use.\n        :param proxies:\n            (optional) The proxies dictionary to apply to the request.\n        :param cert:\n            (optional) Any user-provided SSL certificate to be used for client\n            authentication (a.k.a., mTLS).\n        :rtype:\n            urllib3.HTTPConnectionPool\n        \"\"\"\n        assert _is_prepared(request)\n\n        proxy = select_proxy(request.url, proxies)\n        try:\n            host_params, pool_kwargs = self.build_connection_pool_key_attributes(\n                request,\n                verify,\n                cert,\n            )\n        except ValueError as e:\n            raise InvalidURL(e, request=request)\n        if proxy:\n            proxy = prepend_scheme_if_needed(proxy, \"http\")\n            proxy_url = parse_url(proxy)\n            if not proxy_url.host:\n                raise InvalidProxyURL(\n                    \"Please check proxy URL. It is malformed \"\n                    \"and could be missing the host.\"\n                )\n            proxy_manager = self.proxy_manager_for(proxy)\n            conn = proxy_manager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n        else:\n            # Only scheme should be lower case\n            conn = self.poolmanager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n",
+   "tint": 0
+  },
+  {
+   "id": "r6",
+   "repo": "urllib3",
+   "path": "src/urllib3/poolmanager.py",
+   "first": 303,
+   "last": 342,
+   "focus": 303,
+   "summary": "en PoolManager.connection_from_host",
+   "text": "    def connection_from_host(\n        self,\n        host: str | None,\n        port: int | None = None,\n        scheme: str | None = \"http\",\n        pool_kwargs: dict[str, typing.Any] | None = None,\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the host, port, and scheme.\n\n        If ``port`` isn't given, it will be derived from the ``scheme`` using\n        ``urllib3.connectionpool.port_by_scheme``. If ``pool_kwargs`` is\n        provided, it is merged with the instance's ``connection_pool_kw``\n        variable and used to create the new connection pool, if one is\n        needed.\n        \"\"\"\n\n        if not host:\n            raise LocationValueError(\"No host specified.\")\n\n        request_context = self._merge_pool_kwargs(pool_kwargs)\n        request_context[\"scheme\"] = scheme or \"http\"\n        if port is None:\n            port = port_by_scheme.get(request_context[\"scheme\"].lower(), 80)\n        request_context[\"port\"] = port\n        request_context[\"host\"] = host\n\n        return self.connection_from_context(request_context)\n\n    def connection_from_context(\n        self, request_context: dict[str, typing.Any]\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the request context.\n\n        ``request_context`` must at least contain the ``scheme`` key and its\n        value must be a key in ``key_fn_by_scheme`` instance variable.\n        \"\"\"\n        if \"strict\" in request_context:\n            warnings.warn(",
+   "tint": 1
+  },
+  {
+   "id": "r7",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 870,
+   "last": 909,
+   "focus": 870,
+   "summary": "en Session.get_adapter",
+   "text": "    def get_adapter(self, url: str) -> BaseAdapter:\n        \"\"\"\n        Returns the appropriate connection adapter for the given URL.\n\n        :rtype: requests.adapters.BaseAdapter\n        \"\"\"\n        for prefix, adapter in self.adapters.items():\n            if url.lower().startswith(prefix.lower()):\n                return adapter\n\n        # Nothing matches :-/\n        raise InvalidSchema(f\"No connection adapters were found for {url!r}\")\n\n    def close(self) -> None:\n        \"\"\"Closes all adapters and as such the session\"\"\"\n        for v in self.adapters.values():\n            v.close()\n\n    def mount(self, prefix: str, adapter: BaseAdapter) -> None:\n        \"\"\"Registers a connection adapter to a prefix.\n\n        Adapters are sorted in descending order by prefix length.\n        \"\"\"\n        self.adapters[prefix] = adapter\n        keys_to_move = [k for k in self.adapters if len(k) < len(prefix)]\n\n        for key in keys_to_move:\n            self.adapters[key] = self.adapters.pop(key)\n\n    def __getstate__(self) -> dict[str, Any]:\n        state = {attr: getattr(self, attr, None) for attr in self.__attrs__}\n        return state\n\n    def __setstate__(self, state: dict[str, Any]) -> None:\n        for attr, value in state.items():\n            setattr(self, attr, value)\n\n\ndef session() -> Session:\n    \"\"\"",
+   "tint": 0
+  }
+ ],
+ "retry-board": [
+  {
+   "id": "r1",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 752,
+   "last": 791,
+   "focus": 784,
+   "summary": "en Session.send",
+   "text": "    def send(self, request: PreparedRequest, **kwargs: Any) -> Response:\n        \"\"\"Send a given PreparedRequest.\n\n        :rtype: requests.Response\n        \"\"\"\n        # Set defaults that the hooks can utilize to ensure they always have\n        # the correct parameters to reproduce the previous request.\n        kwargs.setdefault(\"stream\", self.stream)\n        kwargs.setdefault(\"verify\", self.verify)\n        kwargs.setdefault(\"cert\", self.cert)\n        if \"proxies\" not in kwargs:\n            kwargs[\"proxies\"] = resolve_proxies(request, self.proxies, self.trust_env)\n\n        # It's possible that users might accidentally send a Request object.\n        # Guard against that specific failure case.\n        if isinstance(request, Request):\n            raise ValueError(\"You can only send PreparedRequests.\")\n\n        assert _is_prepared(request)\n\n        # Set up variables needed for resolve_redirects and dispatching of hooks\n        allow_redirects = kwargs.pop(\"allow_redirects\", True)\n        stream = kwargs.get(\"stream\")\n        hooks = request.hooks\n\n        # Get the appropriate adapter to use\n        adapter = self.get_adapter(url=request.url)\n\n        # Start time (approximately) of the request\n        start = preferred_clock()\n\n        # Send the request\n        r = adapter.send(request, **kwargs)\n\n        # Total elapsed time of the request (approximately)\n        elapsed = preferred_clock() - start\n        r.elapsed = timedelta(seconds=elapsed)\n\n        # Response manipulation hooks\n        r = dispatch_hook(\"response\", hooks, r, **kwargs)",
+   "tint": 0
+  },
+  {
+   "id": "r2",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 681,
+   "last": 720,
+   "focus": 696,
+   "summary": "en HTTPAdapter.send",
+   "text": "        if isinstance(timeout, tuple):\n            try:\n                connect, read = timeout\n                resolved_timeout = TimeoutSauce(connect=connect, read=read)\n            except ValueError:\n                raise ValueError(\n                    f\"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, \"\n                    f\"or a single float to set both timeouts to the same value.\"\n                )\n        elif isinstance(timeout, TimeoutSauce):\n            resolved_timeout = timeout\n        else:\n            resolved_timeout = TimeoutSauce(connect=timeout, read=timeout)\n\n        try:\n            resp = conn.urlopen(\n                method=request.method,\n                url=url,\n                body=request.body,  # type: ignore[arg-type]  # urllib3 stubs don't accept Iterable[bytes | str]\n                headers=request.headers,  # type: ignore[arg-type]  # urllib3#3072\n                redirect=False,\n                assert_same_host=False,\n                preload_content=False,\n                decode_content=False,\n                retries=self.max_retries,\n                timeout=resolved_timeout,\n                chunked=chunked,\n            )\n\n        except (ProtocolError, OSError) as err:\n            raise ConnectionError(err, request=request)\n\n        except MaxRetryError as e:\n            if isinstance(e.reason, ConnectTimeoutError):\n                # TODO: Remove this in 3.0.0: see #2811\n                if not isinstance(e.reason, NewConnectionError):\n                    raise ConnectTimeout(e, request=request)\n\n            if isinstance(e.reason, ResponseError):\n                raise RetryError(e, request=request)",
+   "tint": 0
+  },
+  {
+   "id": "r3",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 762,
+   "last": 801,
+   "focus": 782,
+   "summary": "en HTTPConnectionPool.urlopen",
+   "text": "            conn = self._get_conn(timeout=pool_timeout)\n            conn.timeout = timeout_obj.connect_timeout  # type: ignore[assignment]\n\n            # Is this a closed/new connection that requires CONNECT tunnelling?\n            if self.proxy is not None and http_tunnel_required and conn.is_closed:\n                try:\n                    self._prepare_proxy(conn)\n                except (BaseSSLError, OSError, SocketTimeout) as e:\n                    self._raise_timeout(\n                        err=e, url=self.proxy.url, timeout_value=conn.timeout\n                    )\n                    raise\n\n            # If we're going to release the connection in ``finally:``, then\n            # the response doesn't need to know about the connection. Otherwise\n            # it will also try to release it and we'll have a double-release\n            # mess.\n            response_conn = conn if not release_conn else None\n\n            # Make the request on the HTTPConnection object\n            response = self._make_request(\n                conn,\n                method,\n                url,\n                timeout=timeout_obj,\n                body=body,\n                headers=headers,\n                chunked=chunked,\n                retries=retries,\n                response_conn=response_conn,\n                preload_content=preload_content,\n                decode_content=decode_content,\n                **response_kw,\n            )\n\n            # Everything went great!\n            clean_exit = True\n\n        except EmptyPoolError:\n            # Didn't get a connection from the pool, no need to clean up",
+   "tint": 1
+  },
+  {
+   "id": "r4",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 383,
+   "last": 422,
+   "focus": 383,
+   "summary": "en HTTPConnectionPool._make_request",
+   "text": "    def _make_request(\n        self,\n        conn: BaseHTTPConnection,\n        method: str,\n        url: str,\n        body: _TYPE_BODY | None = None,\n        headers: typing.Mapping[str, str] | None = None,\n        retries: Retry | None = None,\n        timeout: _TYPE_TIMEOUT = _DEFAULT_TIMEOUT,\n        chunked: bool = False,\n        response_conn: BaseHTTPConnection | None = None,\n        preload_content: bool = True,\n        decode_content: bool = True,\n        enforce_content_length: bool = True,\n    ) -> BaseHTTPResponse:\n        \"\"\"\n        Perform a request on a given urllib connection object taken from our\n        pool.\n\n        :param conn:\n            a connection from one of our connection pools\n\n        :param method:\n            HTTP request method (such as GET, POST, PUT, etc.)\n\n        :param url:\n            The URL to perform the request on.\n\n        :param body:\n            Data to send in the request body, either :class:`str`, :class:`bytes`,\n            an iterable of :class:`str`/:class:`bytes`, or a file-like object.\n\n        :param headers:\n            Dictionary of custom headers to send, such as User-Agent,\n            If-None-Match, etc. If None, pool headers are used. If provided,\n            these headers completely replace any pool-specific headers.\n\n        :param retries:\n            Configure the number of retries to allow before raising a\n            :class:`~urllib3.exceptions.MaxRetryError` exception.",
+   "tint": 1
+  },
+  {
+   "id": "r5",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 470,
+   "last": 509,
+   "focus": 506,
+   "summary": "en HTTPAdapter.get_connection_with_tls_context",
+   "text": "            Either a boolean, in which case it controls whether we verify the\n            server's TLS certificate, or a string, in which case it must be a\n            path to a CA bundle to use.\n        :param proxies:\n            (optional) The proxies dictionary to apply to the request.\n        :param cert:\n            (optional) Any user-provided SSL certificate to be used for client\n            authentication (a.k.a., mTLS).\n        :rtype:\n            urllib3.HTTPConnectionPool\n        \"\"\"\n        assert _is_prepared(request)\n\n        proxy = select_proxy(request.url, proxies)\n        try:\n            host_params, pool_kwargs = self.build_connection_pool_key_attributes(\n                request,\n                verify,\n                cert,\n            )\n        except ValueError as e:\n            raise InvalidURL(e, request=request)\n        if proxy:\n            proxy = prepend_scheme_if_needed(proxy, \"http\")\n            proxy_url = parse_url(proxy)\n            if not proxy_url.host:\n                raise InvalidProxyURL(\n                    \"Please check proxy URL. It is malformed \"\n                    \"and could be missing the host.\"\n                )\n            proxy_manager = self.proxy_manager_for(proxy)\n            conn = proxy_manager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n        else:\n            # Only scheme should be lower case\n            conn = self.poolmanager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n",
+   "tint": 0
+  },
+  {
+   "id": "r6",
+   "repo": "urllib3",
+   "path": "src/urllib3/poolmanager.py",
+   "first": 303,
+   "last": 342,
+   "focus": 303,
+   "summary": "en PoolManager.connection_from_host",
+   "text": "    def connection_from_host(\n        self,\n        host: str | None,\n        port: int | None = None,\n        scheme: str | None = \"http\",\n        pool_kwargs: dict[str, typing.Any] | None = None,\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the host, port, and scheme.\n\n        If ``port`` isn't given, it will be derived from the ``scheme`` using\n        ``urllib3.connectionpool.port_by_scheme``. If ``pool_kwargs`` is\n        provided, it is merged with the instance's ``connection_pool_kw``\n        variable and used to create the new connection pool, if one is\n        needed.\n        \"\"\"\n\n        if not host:\n            raise LocationValueError(\"No host specified.\")\n\n        request_context = self._merge_pool_kwargs(pool_kwargs)\n        request_context[\"scheme\"] = scheme or \"http\"\n        if port is None:\n            port = port_by_scheme.get(request_context[\"scheme\"].lower(), 80)\n        request_context[\"port\"] = port\n        request_context[\"host\"] = host\n\n        return self.connection_from_context(request_context)\n\n    def connection_from_context(\n        self, request_context: dict[str, typing.Any]\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the request context.\n\n        ``request_context`` must at least contain the ``scheme`` key and its\n        value must be a key in ``key_fn_by_scheme`` instance variable.\n        \"\"\"\n        if \"strict\" in request_context:\n            warnings.warn(",
+   "tint": 1
+  },
+  {
+   "id": "r7",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 870,
+   "last": 909,
+   "focus": 870,
+   "summary": "en Session.get_adapter",
+   "text": "    def get_adapter(self, url: str) -> BaseAdapter:\n        \"\"\"\n        Returns the appropriate connection adapter for the given URL.\n\n        :rtype: requests.adapters.BaseAdapter\n        \"\"\"\n        for prefix, adapter in self.adapters.items():\n            if url.lower().startswith(prefix.lower()):\n                return adapter\n\n        # Nothing matches :-/\n        raise InvalidSchema(f\"No connection adapters were found for {url!r}\")\n\n    def close(self) -> None:\n        \"\"\"Closes all adapters and as such the session\"\"\"\n        for v in self.adapters.values():\n            v.close()\n\n    def mount(self, prefix: str, adapter: BaseAdapter) -> None:\n        \"\"\"Registers a connection adapter to a prefix.\n\n        Adapters are sorted in descending order by prefix length.\n        \"\"\"\n        self.adapters[prefix] = adapter\n        keys_to_move = [k for k in self.adapters if len(k) < len(prefix)]\n\n        for key in keys_to_move:\n            self.adapters[key] = self.adapters.pop(key)\n\n    def __getstate__(self) -> dict[str, Any]:\n        state = {attr: getattr(self, attr, None) for attr in self.__attrs__}\n        return state\n\n    def __setstate__(self, state: dict[str, Any]) -> None:\n        for attr, value in state.items():\n            setattr(self, attr, value)\n\n\ndef session() -> Session:\n    \"\"\"",
+   "tint": 0
+  }
+ ],
+ "broken-choices": [
+  {
+   "id": "r1",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 752,
+   "last": 791,
+   "focus": 784,
+   "summary": "en Session.send",
+   "text": "    def send(self, request: PreparedRequest, **kwargs: Any) -> Response:\n        \"\"\"Send a given PreparedRequest.\n\n        :rtype: requests.Response\n        \"\"\"\n        # Set defaults that the hooks can utilize to ensure they always have\n        # the correct parameters to reproduce the previous request.\n        kwargs.setdefault(\"stream\", self.stream)\n        kwargs.setdefault(\"verify\", self.verify)\n        kwargs.setdefault(\"cert\", self.cert)\n        if \"proxies\" not in kwargs:\n            kwargs[\"proxies\"] = resolve_proxies(request, self.proxies, self.trust_env)\n\n        # It's possible that users might accidentally send a Request object.\n        # Guard against that specific failure case.\n        if isinstance(request, Request):\n            raise ValueError(\"You can only send PreparedRequests.\")\n\n        assert _is_prepared(request)\n\n        # Set up variables needed for resolve_redirects and dispatching of hooks\n        allow_redirects = kwargs.pop(\"allow_redirects\", True)\n        stream = kwargs.get(\"stream\")\n        hooks = request.hooks\n\n        # Get the appropriate adapter to use\n        adapter = self.get_adapter(url=request.url)\n\n        # Start time (approximately) of the request\n        start = preferred_clock()\n\n        # Send the request\n        r = adapter.send(request, **kwargs)\n\n        # Total elapsed time of the request (approximately)\n        elapsed = preferred_clock() - start\n        r.elapsed = timedelta(seconds=elapsed)\n\n        # Response manipulation hooks\n        r = dispatch_hook(\"response\", hooks, r, **kwargs)",
+   "tint": 0
+  },
+  {
+   "id": "r2",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 681,
+   "last": 720,
+   "focus": 696,
+   "summary": "en HTTPAdapter.send",
+   "text": "        if isinstance(timeout, tuple):\n            try:\n                connect, read = timeout\n                resolved_timeout = TimeoutSauce(connect=connect, read=read)\n            except ValueError:\n                raise ValueError(\n                    f\"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, \"\n                    f\"or a single float to set both timeouts to the same value.\"\n                )\n        elif isinstance(timeout, TimeoutSauce):\n            resolved_timeout = timeout\n        else:\n            resolved_timeout = TimeoutSauce(connect=timeout, read=timeout)\n\n        try:\n            resp = conn.urlopen(\n                method=request.method,\n                url=url,\n                body=request.body,  # type: ignore[arg-type]  # urllib3 stubs don't accept Iterable[bytes | str]\n                headers=request.headers,  # type: ignore[arg-type]  # urllib3#3072\n                redirect=False,\n                assert_same_host=False,\n                preload_content=False,\n                decode_content=False,\n                retries=self.max_retries,\n                timeout=resolved_timeout,\n                chunked=chunked,\n            )\n\n        except (ProtocolError, OSError) as err:\n            raise ConnectionError(err, request=request)\n\n        except MaxRetryError as e:\n            if isinstance(e.reason, ConnectTimeoutError):\n                # TODO: Remove this in 3.0.0: see #2811\n                if not isinstance(e.reason, NewConnectionError):\n                    raise ConnectTimeout(e, request=request)\n\n            if isinstance(e.reason, ResponseError):\n                raise RetryError(e, request=request)",
+   "tint": 0
+  },
+  {
+   "id": "r3",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 762,
+   "last": 801,
+   "focus": 782,
+   "summary": "en HTTPConnectionPool.urlopen",
+   "text": "            conn = self._get_conn(timeout=pool_timeout)\n            conn.timeout = timeout_obj.connect_timeout  # type: ignore[assignment]\n\n            # Is this a closed/new connection that requires CONNECT tunnelling?\n            if self.proxy is not None and http_tunnel_required and conn.is_closed:\n                try:\n                    self._prepare_proxy(conn)\n                except (BaseSSLError, OSError, SocketTimeout) as e:\n                    self._raise_timeout(\n                        err=e, url=self.proxy.url, timeout_value=conn.timeout\n                    )\n                    raise\n\n            # If we're going to release the connection in ``finally:``, then\n            # the response doesn't need to know about the connection. Otherwise\n            # it will also try to release it and we'll have a double-release\n            # mess.\n            response_conn = conn if not release_conn else None\n\n            # Make the request on the HTTPConnection object\n            response = self._make_request(\n                conn,\n                method,\n                url,\n                timeout=timeout_obj,\n                body=body,\n                headers=headers,\n                chunked=chunked,\n                retries=retries,\n                response_conn=response_conn,\n                preload_content=preload_content,\n                decode_content=decode_content,\n                **response_kw,\n            )\n\n            # Everything went great!\n            clean_exit = True\n\n        except EmptyPoolError:\n            # Didn't get a connection from the pool, no need to clean up",
+   "tint": 1
+  },
+  {
+   "id": "r4",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 383,
+   "last": 422,
+   "focus": 383,
+   "summary": "en HTTPConnectionPool._make_request",
+   "text": "    def _make_request(\n        self,\n        conn: BaseHTTPConnection,\n        method: str,\n        url: str,\n        body: _TYPE_BODY | None = None,\n        headers: typing.Mapping[str, str] | None = None,\n        retries: Retry | None = None,\n        timeout: _TYPE_TIMEOUT = _DEFAULT_TIMEOUT,\n        chunked: bool = False,\n        response_conn: BaseHTTPConnection | None = None,\n        preload_content: bool = True,\n        decode_content: bool = True,\n        enforce_content_length: bool = True,\n    ) -> BaseHTTPResponse:\n        \"\"\"\n        Perform a request on a given urllib connection object taken from our\n        pool.\n\n        :param conn:\n            a connection from one of our connection pools\n\n        :param method:\n            HTTP request method (such as GET, POST, PUT, etc.)\n\n        :param url:\n            The URL to perform the request on.\n\n        :param body:\n            Data to send in the request body, either :class:`str`, :class:`bytes`,\n            an iterable of :class:`str`/:class:`bytes`, or a file-like object.\n\n        :param headers:\n            Dictionary of custom headers to send, such as User-Agent,\n            If-None-Match, etc. If None, pool headers are used. If provided,\n            these headers completely replace any pool-specific headers.\n\n        :param retries:\n            Configure the number of retries to allow before raising a\n            :class:`~urllib3.exceptions.MaxRetryError` exception.",
+   "tint": 1
+  },
+  {
+   "id": "r5",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 470,
+   "last": 509,
+   "focus": 506,
+   "summary": "en HTTPAdapter.get_connection_with_tls_context",
+   "text": "            Either a boolean, in which case it controls whether we verify the\n            server's TLS certificate, or a string, in which case it must be a\n            path to a CA bundle to use.\n        :param proxies:\n            (optional) The proxies dictionary to apply to the request.\n        :param cert:\n            (optional) Any user-provided SSL certificate to be used for client\n            authentication (a.k.a., mTLS).\n        :rtype:\n            urllib3.HTTPConnectionPool\n        \"\"\"\n        assert _is_prepared(request)\n\n        proxy = select_proxy(request.url, proxies)\n        try:\n            host_params, pool_kwargs = self.build_connection_pool_key_attributes(\n                request,\n                verify,\n                cert,\n            )\n        except ValueError as e:\n            raise InvalidURL(e, request=request)\n        if proxy:\n            proxy = prepend_scheme_if_needed(proxy, \"http\")\n            proxy_url = parse_url(proxy)\n            if not proxy_url.host:\n                raise InvalidProxyURL(\n                    \"Please check proxy URL. It is malformed \"\n                    \"and could be missing the host.\"\n                )\n            proxy_manager = self.proxy_manager_for(proxy)\n            conn = proxy_manager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n        else:\n            # Only scheme should be lower case\n            conn = self.poolmanager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n",
+   "tint": 0
+  },
+  {
+   "id": "r6",
+   "repo": "urllib3",
+   "path": "src/urllib3/poolmanager.py",
+   "first": 303,
+   "last": 342,
+   "focus": 303,
+   "summary": "en PoolManager.connection_from_host",
+   "text": "    def connection_from_host(\n        self,\n        host: str | None,\n        port: int | None = None,\n        scheme: str | None = \"http\",\n        pool_kwargs: dict[str, typing.Any] | None = None,\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the host, port, and scheme.\n\n        If ``port`` isn't given, it will be derived from the ``scheme`` using\n        ``urllib3.connectionpool.port_by_scheme``. If ``pool_kwargs`` is\n        provided, it is merged with the instance's ``connection_pool_kw``\n        variable and used to create the new connection pool, if one is\n        needed.\n        \"\"\"\n\n        if not host:\n            raise LocationValueError(\"No host specified.\")\n\n        request_context = self._merge_pool_kwargs(pool_kwargs)\n        request_context[\"scheme\"] = scheme or \"http\"\n        if port is None:\n            port = port_by_scheme.get(request_context[\"scheme\"].lower(), 80)\n        request_context[\"port\"] = port\n        request_context[\"host\"] = host\n\n        return self.connection_from_context(request_context)\n\n    def connection_from_context(\n        self, request_context: dict[str, typing.Any]\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the request context.\n\n        ``request_context`` must at least contain the ``scheme`` key and its\n        value must be a key in ``key_fn_by_scheme`` instance variable.\n        \"\"\"\n        if \"strict\" in request_context:\n            warnings.warn(",
+   "tint": 1
+  },
+  {
+   "id": "r7",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 870,
+   "last": 909,
+   "focus": 870,
+   "summary": "en Session.get_adapter",
+   "text": "    def get_adapter(self, url: str) -> BaseAdapter:\n        \"\"\"\n        Returns the appropriate connection adapter for the given URL.\n\n        :rtype: requests.adapters.BaseAdapter\n        \"\"\"\n        for prefix, adapter in self.adapters.items():\n            if url.lower().startswith(prefix.lower()):\n                return adapter\n\n        # Nothing matches :-/\n        raise InvalidSchema(f\"No connection adapters were found for {url!r}\")\n\n    def close(self) -> None:\n        \"\"\"Closes all adapters and as such the session\"\"\"\n        for v in self.adapters.values():\n            v.close()\n\n    def mount(self, prefix: str, adapter: BaseAdapter) -> None:\n        \"\"\"Registers a connection adapter to a prefix.\n\n        Adapters are sorted in descending order by prefix length.\n        \"\"\"\n        self.adapters[prefix] = adapter\n        keys_to_move = [k for k in self.adapters if len(k) < len(prefix)]\n\n        for key in keys_to_move:\n            self.adapters[key] = self.adapters.pop(key)\n\n    def __getstate__(self) -> dict[str, Any]:\n        state = {attr: getattr(self, attr, None) for attr in self.__attrs__}\n        return state\n\n    def __setstate__(self, state: dict[str, Any]) -> None:\n        for attr, value in state.items():\n            setattr(self, attr, value)\n\n\ndef session() -> Session:\n    \"\"\"",
+   "tint": 0
+  }
+ ],
+ "board-norefs": [],
+ "repos-matches": [
+  {
+   "id": "r1",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 752,
+   "last": 791,
+   "focus": 784,
+   "summary": "en Session.send",
+   "text": "    def send(self, request: PreparedRequest, **kwargs: Any) -> Response:\n        \"\"\"Send a given PreparedRequest.\n\n        :rtype: requests.Response\n        \"\"\"\n        # Set defaults that the hooks can utilize to ensure they always have\n        # the correct parameters to reproduce the previous request.\n        kwargs.setdefault(\"stream\", self.stream)\n        kwargs.setdefault(\"verify\", self.verify)\n        kwargs.setdefault(\"cert\", self.cert)\n        if \"proxies\" not in kwargs:\n            kwargs[\"proxies\"] = resolve_proxies(request, self.proxies, self.trust_env)\n\n        # It's possible that users might accidentally send a Request object.\n        # Guard against that specific failure case.\n        if isinstance(request, Request):\n            raise ValueError(\"You can only send PreparedRequests.\")\n\n        assert _is_prepared(request)\n\n        # Set up variables needed for resolve_redirects and dispatching of hooks\n        allow_redirects = kwargs.pop(\"allow_redirects\", True)\n        stream = kwargs.get(\"stream\")\n        hooks = request.hooks\n\n        # Get the appropriate adapter to use\n        adapter = self.get_adapter(url=request.url)\n\n        # Start time (approximately) of the request\n        start = preferred_clock()\n\n        # Send the request\n        r = adapter.send(request, **kwargs)\n\n        # Total elapsed time of the request (approximately)\n        elapsed = preferred_clock() - start\n        r.elapsed = timedelta(seconds=elapsed)\n\n        # Response manipulation hooks\n        r = dispatch_hook(\"response\", hooks, r, **kwargs)",
+   "tint": 0
+  },
+  {
+   "id": "r2",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 681,
+   "last": 720,
+   "focus": 696,
+   "summary": "en HTTPAdapter.send",
+   "text": "        if isinstance(timeout, tuple):\n            try:\n                connect, read = timeout\n                resolved_timeout = TimeoutSauce(connect=connect, read=read)\n            except ValueError:\n                raise ValueError(\n                    f\"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, \"\n                    f\"or a single float to set both timeouts to the same value.\"\n                )\n        elif isinstance(timeout, TimeoutSauce):\n            resolved_timeout = timeout\n        else:\n            resolved_timeout = TimeoutSauce(connect=timeout, read=timeout)\n\n        try:\n            resp = conn.urlopen(\n                method=request.method,\n                url=url,\n                body=request.body,  # type: ignore[arg-type]  # urllib3 stubs don't accept Iterable[bytes | str]\n                headers=request.headers,  # type: ignore[arg-type]  # urllib3#3072\n                redirect=False,\n                assert_same_host=False,\n                preload_content=False,\n                decode_content=False,\n                retries=self.max_retries,\n                timeout=resolved_timeout,\n                chunked=chunked,\n            )\n\n        except (ProtocolError, OSError) as err:\n            raise ConnectionError(err, request=request)\n\n        except MaxRetryError as e:\n            if isinstance(e.reason, ConnectTimeoutError):\n                # TODO: Remove this in 3.0.0: see #2811\n                if not isinstance(e.reason, NewConnectionError):\n                    raise ConnectTimeout(e, request=request)\n\n            if isinstance(e.reason, ResponseError):\n                raise RetryError(e, request=request)",
+   "tint": 0
+  },
+  {
+   "id": "r3",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 762,
+   "last": 801,
+   "focus": 782,
+   "summary": "en HTTPConnectionPool.urlopen",
+   "text": "            conn = self._get_conn(timeout=pool_timeout)\n            conn.timeout = timeout_obj.connect_timeout  # type: ignore[assignment]\n\n            # Is this a closed/new connection that requires CONNECT tunnelling?\n            if self.proxy is not None and http_tunnel_required and conn.is_closed:\n                try:\n                    self._prepare_proxy(conn)\n                except (BaseSSLError, OSError, SocketTimeout) as e:\n                    self._raise_timeout(\n                        err=e, url=self.proxy.url, timeout_value=conn.timeout\n                    )\n                    raise\n\n            # If we're going to release the connection in ``finally:``, then\n            # the response doesn't need to know about the connection. Otherwise\n            # it will also try to release it and we'll have a double-release\n            # mess.\n            response_conn = conn if not release_conn else None\n\n            # Make the request on the HTTPConnection object\n            response = self._make_request(\n                conn,\n                method,\n                url,\n                timeout=timeout_obj,\n                body=body,\n                headers=headers,\n                chunked=chunked,\n                retries=retries,\n                response_conn=response_conn,\n                preload_content=preload_content,\n                decode_content=decode_content,\n                **response_kw,\n            )\n\n            # Everything went great!\n            clean_exit = True\n\n        except EmptyPoolError:\n            # Didn't get a connection from the pool, no need to clean up",
+   "tint": 1
+  },
+  {
+   "id": "r4",
+   "repo": "urllib3",
+   "path": "src/urllib3/connectionpool.py",
+   "first": 383,
+   "last": 422,
+   "focus": 383,
+   "summary": "en HTTPConnectionPool._make_request",
+   "text": "    def _make_request(\n        self,\n        conn: BaseHTTPConnection,\n        method: str,\n        url: str,\n        body: _TYPE_BODY | None = None,\n        headers: typing.Mapping[str, str] | None = None,\n        retries: Retry | None = None,\n        timeout: _TYPE_TIMEOUT = _DEFAULT_TIMEOUT,\n        chunked: bool = False,\n        response_conn: BaseHTTPConnection | None = None,\n        preload_content: bool = True,\n        decode_content: bool = True,\n        enforce_content_length: bool = True,\n    ) -> BaseHTTPResponse:\n        \"\"\"\n        Perform a request on a given urllib connection object taken from our\n        pool.\n\n        :param conn:\n            a connection from one of our connection pools\n\n        :param method:\n            HTTP request method (such as GET, POST, PUT, etc.)\n\n        :param url:\n            The URL to perform the request on.\n\n        :param body:\n            Data to send in the request body, either :class:`str`, :class:`bytes`,\n            an iterable of :class:`str`/:class:`bytes`, or a file-like object.\n\n        :param headers:\n            Dictionary of custom headers to send, such as User-Agent,\n            If-None-Match, etc. If None, pool headers are used. If provided,\n            these headers completely replace any pool-specific headers.\n\n        :param retries:\n            Configure the number of retries to allow before raising a\n            :class:`~urllib3.exceptions.MaxRetryError` exception.",
+   "tint": 1
+  },
+  {
+   "id": "r5",
+   "repo": "requests",
+   "path": "src/requests/adapters.py",
+   "first": 470,
+   "last": 509,
+   "focus": 506,
+   "summary": "en HTTPAdapter.get_connection_with_tls_context",
+   "text": "            Either a boolean, in which case it controls whether we verify the\n            server's TLS certificate, or a string, in which case it must be a\n            path to a CA bundle to use.\n        :param proxies:\n            (optional) The proxies dictionary to apply to the request.\n        :param cert:\n            (optional) Any user-provided SSL certificate to be used for client\n            authentication (a.k.a., mTLS).\n        :rtype:\n            urllib3.HTTPConnectionPool\n        \"\"\"\n        assert _is_prepared(request)\n\n        proxy = select_proxy(request.url, proxies)\n        try:\n            host_params, pool_kwargs = self.build_connection_pool_key_attributes(\n                request,\n                verify,\n                cert,\n            )\n        except ValueError as e:\n            raise InvalidURL(e, request=request)\n        if proxy:\n            proxy = prepend_scheme_if_needed(proxy, \"http\")\n            proxy_url = parse_url(proxy)\n            if not proxy_url.host:\n                raise InvalidProxyURL(\n                    \"Please check proxy URL. It is malformed \"\n                    \"and could be missing the host.\"\n                )\n            proxy_manager = self.proxy_manager_for(proxy)\n            conn = proxy_manager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n        else:\n            # Only scheme should be lower case\n            conn = self.poolmanager.connection_from_host(\n                **host_params, pool_kwargs=pool_kwargs\n            )\n",
+   "tint": 0
+  },
+  {
+   "id": "r6",
+   "repo": "urllib3",
+   "path": "src/urllib3/poolmanager.py",
+   "first": 303,
+   "last": 342,
+   "focus": 303,
+   "summary": "en PoolManager.connection_from_host",
+   "text": "    def connection_from_host(\n        self,\n        host: str | None,\n        port: int | None = None,\n        scheme: str | None = \"http\",\n        pool_kwargs: dict[str, typing.Any] | None = None,\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the host, port, and scheme.\n\n        If ``port`` isn't given, it will be derived from the ``scheme`` using\n        ``urllib3.connectionpool.port_by_scheme``. If ``pool_kwargs`` is\n        provided, it is merged with the instance's ``connection_pool_kw``\n        variable and used to create the new connection pool, if one is\n        needed.\n        \"\"\"\n\n        if not host:\n            raise LocationValueError(\"No host specified.\")\n\n        request_context = self._merge_pool_kwargs(pool_kwargs)\n        request_context[\"scheme\"] = scheme or \"http\"\n        if port is None:\n            port = port_by_scheme.get(request_context[\"scheme\"].lower(), 80)\n        request_context[\"port\"] = port\n        request_context[\"host\"] = host\n\n        return self.connection_from_context(request_context)\n\n    def connection_from_context(\n        self, request_context: dict[str, typing.Any]\n    ) -> HTTPConnectionPool:\n        \"\"\"\n        Get a :class:`urllib3.connectionpool.ConnectionPool` based on the request context.\n\n        ``request_context`` must at least contain the ``scheme`` key and its\n        value must be a key in ``key_fn_by_scheme`` instance variable.\n        \"\"\"\n        if \"strict\" in request_context:\n            warnings.warn(",
+   "tint": 1
+  },
+  {
+   "id": "r7",
+   "repo": "requests",
+   "path": "src/requests/sessions.py",
+   "first": 870,
+   "last": 909,
+   "focus": 870,
+   "summary": "en Session.get_adapter",
+   "text": "    def get_adapter(self, url: str) -> BaseAdapter:\n        \"\"\"\n        Returns the appropriate connection adapter for the given URL.\n\n        :rtype: requests.adapters.BaseAdapter\n        \"\"\"\n        for prefix, adapter in self.adapters.items():\n            if url.lower().startswith(prefix.lower()):\n                return adapter\n\n        # Nothing matches :-/\n        raise InvalidSchema(f\"No connection adapters were found for {url!r}\")\n\n    def close(self) -> None:\n        \"\"\"Closes all adapters and as such the session\"\"\"\n        for v in self.adapters.values():\n            v.close()\n\n    def mount(self, prefix: str, adapter: BaseAdapter) -> None:\n        \"\"\"Registers a connection adapter to a prefix.\n\n        Adapters are sorted in descending order by prefix length.\n        \"\"\"\n        self.adapters[prefix] = adapter\n        keys_to_move = [k for k in self.adapters if len(k) < len(prefix)]\n\n        for key in keys_to_move:\n            self.adapters[key] = self.adapters.pop(key)\n\n    def __getstate__(self) -> dict[str, Any]:\n        state = {attr: getattr(self, attr, None) for attr in self.__attrs__}\n        return state\n\n    def __setstate__(self, state: dict[str, Any]) -> None:\n        for attr, value in state.items():\n            setattr(self, attr, value)\n\n\ndef session() -> Session:\n    \"\"\"",
+   "tint": 0
+  }
  ]
 }

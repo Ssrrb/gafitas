@@ -64,4 +64,25 @@ describe("bridge", () => {
     api.select(null);
     expect(store.get().selected).toBe(null);
   });
+
+  it("a pick is a turn that remembers where it came from, saved and reopened; a bad via is dropped", () => {
+    api.reset();
+    api.refs([...refsFor("retry-ways").values()]);
+    api.turn("t1", "¿Cómo hago que requests reintente con espera?");
+    api.append(fixture("retry-ways"));
+    api.done();
+    api.busy(true);
+    expect(store.get().busy).toBe(true);
+    api.turn("t2", "Quiero seguir por «Montar un HTTPAdapter con Retry».", { turn: "t1", block: "k1", choices: ["w1"] });
+    expect(store.current().via).toEqual({ turn: "t1", block: "k1", choices: ["w1"] });
+    api.busy(false);
+    expect(store.get().busy).toBe(false);
+    api.turn("t3", "x", { block: 3 } as never);
+    expect(store.current().via).toBeUndefined();
+    api.load([
+      { id: "t1", question: "uno", program: fixture("retry-ways") },
+      { id: "t2", question: "dos", program: "", via: { turn: "t1", block: "k1", choices: ["w2"] } },
+    ]);
+    expect(store.get().turns.map((t) => t.via?.choices)).toEqual([undefined, ["w2"]]);
+  });
 });

@@ -4,6 +4,8 @@ export type Outgoing =
   | { type: "open"; ref: string; line: number | null }
   | { type: "hover"; ref: string | null }
   | { type: "adapt"; ref: string | null; path?: string }
+  | { type: "pick"; turn: string; message: string; context: Record<string, unknown> }
+  | { type: "draft"; message: string }
   | { type: "errors"; turn: string; errors: { id: string; message: string }[]; final?: boolean; program: string };
 
 interface Handler {

@@ -27,6 +27,7 @@ import SwiftUI
 ///                             onboarding:welcome|code|shortcut|ready, ask (with -debugQuery as the question,
 ///                             -debugAskAnswer YES to ask for the answer and wait for it, -debugAskChat ID to reopen a
 ///                             saved chat instead, -debugAskFollowUp "…" to ask that next in the same chat,
+///                             -debugAskPick "Errores de conexión|Seguir" to click those controls in the answer instead,
 ///                             -debugAskOpen YES to click the first piece (-debugDryOpen YES: only log where it opens),
 ///                             -debugWindowSize 980x620; -debugApproveProviders YES skips the privacy sheet; the
 ///                             whole answer page also goes to <snapshot>-answer.png)
@@ -210,6 +211,7 @@ enum DebugHooks {
                 if let reopened { app.openChat(reopened) }
                 let answering = defaults.bool(forKey: "debugAskAnswer")
                 let followUp = defaults.string(forKey: "debugAskFollowUp")
+                let pick = defaults.string(forKey: "debugAskPick")
                 var shot = false
                 let settled = { ask.answer == .done || { if case .failed = ask.answer { true } else { false } }() }
                 // The figure settles, then WebKit draws it, on screen and as the whole page.
@@ -223,6 +225,14 @@ enum DebugHooks {
                     }
                 }
                 let thenFollowUp = {
+                    if let pick, let words = try? JSONSerialization.data(withJSONObject: pick.components(separatedBy: "|")) {
+                        // Click each control whose text starts with these words, in order, as the reader would.
+                        let before = ask.chat?.turns.count ?? 0
+                        let script = "for (const w of \(String(decoding: words, as: UTF8.self))) [...document.querySelectorAll('button, label')].find((el) => el.textContent.trim().startsWith(w))?.click()"
+                        ask.bridge.webView.evaluateJavaScript(script)
+                        log("ask: picked \(pick)")
+                        return waitUntil({ (ask.chat?.turns.count ?? 0) > before && settled() }, deadline: Date().addingTimeInterval(300)) { capture() }
+                    }
                     guard let followUp else { return capture() }
                     ask.followUp = followUp
                     ask.sendFollowUp()

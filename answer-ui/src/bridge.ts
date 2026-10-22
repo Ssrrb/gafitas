@@ -1,7 +1,7 @@
 // Swift → JS: window.gafitas. See README.md for the contract.
 import { mergeStatements } from "@openuidev/lang-core";
 import { refIdOf } from "./refs";
-import { newTurn, store, type Trail } from "./store";
+import { newTurn, store, type Trail, type Via } from "./store";
 import { pruneBroken, validateProgram } from "./validate";
 
 /** A turn saved in the history log, drawn as it was. */
@@ -10,13 +10,15 @@ export interface SavedTurn {
   question: string;
   program: string;
   trail?: Trail;
+  via?: Via;
 }
 
 export interface GafitasApi {
   theme(vars: Record<string, string>): void;
   refs(list: unknown[]): void;
   reset(): void;
-  turn(id: string, question: string): void;
+  turn(id: string, question: string, via?: Via): void;
+  busy(on: boolean): void;
   trail(id: string | null, trail: Trail): void;
   append(delta: string): void;
   done(): void;
@@ -52,6 +54,12 @@ const cleanTrail = (trail: Trail | undefined): Trail => ({
   thinking: typeof trail?.thinking === "string" ? trail.thinking : undefined,
 });
 
+const cleanVia = (via: unknown): Via | undefined => {
+  const v = via as Partial<Via> | null | undefined;
+  if (!v || typeof v.turn !== "string" || typeof v.block !== "string") return undefined;
+  return { turn: v.turn, block: v.block, choices: (Array.isArray(v.choices) ? v.choices : []).map(String) };
+};
+
 export const api: GafitasApi = {
   theme: applyTheme,
   refs(list) {
@@ -60,10 +68,13 @@ export const api: GafitasApi = {
   reset() {
     store.reset();
   },
-  turn(id, question) {
+  turn(id, question, via) {
     const s = store.get();
     if (s.turns.some((turn) => turn.id === id)) return;
-    store.set({ turns: [...s.turns, newTurn(String(id), String(question ?? ""))] }, true);
+    store.set({ turns: [...s.turns, newTurn(String(id), String(question ?? ""), { via: cleanVia(via) })] }, true);
+  },
+  busy(on) {
+    store.set({ busy: Boolean(on) }, true);
   },
   trail(id, trail) {
     const turn = id ? store.get().turns.find((t) => t.id === id) : store.current();
@@ -86,11 +97,11 @@ export const api: GafitasApi = {
     }
     const errors = validateProgram(merged, store.get().refs);
     const kept = errors.length ? pruneBroken(merged, errors) : merged;
-    store.patchTurn(turn.id, { text: kept, phase: "done", revision: turn.revision + 1, final: true, dropped: errors, notice: errors.length > 0 }, true);
+    store.patchTurn(turn.id, { text: kept, phase: "done", revision: turn.revision + 1, final: true, dropped: errors, notice: errors.some((e) => !e.soft) }, true);
   },
   load(turns) {
     const list = (Array.isArray(turns) ? turns : []).map((saved, i) =>
-      newTurn(String(saved.id ?? `t${i + 1}`), String(saved.question ?? ""), { text: String(saved.program ?? ""), phase: "done", final: true, replay: true, trail: cleanTrail(saved.trail) }),
+      newTurn(String(saved.id ?? `t${i + 1}`), String(saved.question ?? ""), { text: String(saved.program ?? ""), phase: "done", final: true, replay: true, trail: cleanTrail(saved.trail), via: cleanVia(saved.via) }),
     );
     store.set({ turns: list }, true);
   },

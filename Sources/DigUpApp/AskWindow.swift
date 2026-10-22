@@ -231,6 +231,8 @@ final class AskModel {
     // The turn being answered.
     @ObservationIgnored private var turnID = ""
     @ObservationIgnored private var turnQuestion = ""
+    /// The block the turn's question was picked in, if it was.
+    @ObservationIgnored private var turnVia: ChatTurn.Via?
     @ObservationIgnored private var trail: [[String: Any]] = []
     @ObservationIgnored private var trailSummary: String?
     @ObservationIgnored private var thinking = ""
@@ -374,8 +376,11 @@ final class AskModel {
         bridge.reset()
         bridge.refs(saved.refs.map(Self.forPage))
         bridge.load(saved.turns.enumerated().map { index, turn in
-            ["id": "t\(index + 1)", "question": turn.question, "program": turn.program,
-             "trail": ["lines": turn.trail.map(Self.line), "summary": turn.summary, "thinking": turn.thinking]]
+            var saved: [String: Any] = ["id": "t\(index + 1)", "question": turn.question, "program": turn.program,
+                                        "trail": ["lines": turn.trail.map(Self.line), "summary": turn.summary,
+                                                  "thinking": turn.thinking]]
+            if let via = turn.via { saved["via"] = ["turn": via.turn, "block": via.block, "choices": via.choices] }
+            return saved
         })
         DispatchQueue.main.async { [weak self] in self?.focusField() }
     }
@@ -426,23 +431,33 @@ final class AskModel {
     /// The composer: a follow-up in this chat. In a reopened chat, Pi gets the chat so far first.
     func sendFollowUp() {
         let text = followUp.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !working, let chat else { return }
+        guard !text.isEmpty, !working, chat != nil else { return }
+        followUp = ""
+        ask(text)
+    }
+
+    /// The next question in this chat, typed or picked; `note` tells Pi what the pick was made from. In a reopened
+    /// chat, Pi gets the chat so far first.
+    private func ask(_ text: String, via: ChatTurn.Via? = nil, note: String? = nil) {
+        guard let chat else { return }
         guard let pi = AgentRunner.locate() else {
             answer = .needsPi
+            followUp = text
             return
         }
-        followUp = ""
         turnQuestion = text
+        turnVia = via
+        let message = note.map { "\($0)\n\n\(text)" } ?? text
         if sessionChat == chat.id, agent.isRunning {
             beginTurn(text)
-            begin(text, fresh: false)
+            begin(message, fresh: false)
             return
         }
         // A new process, told to number its places after the ones this chat already cites.
         closeAgent()
         guard startPi(pi) else { return }
         beginTurn(text, continuing: true)
-        begin(Self.continuation(chat, question: text), fresh: true)
+        begin(Self.continuation(chat, question: message), fresh: true)
     }
 
     func stop() {
@@ -535,7 +550,8 @@ final class AskModel {
         streamed = ""
         started = Date()
         answer = .working
-        bridge.turn(turnID, question: text)
+        bridge.turn(turnID, question: text, via: turnVia)
+        bridge.busy(true)
         if continuing {
             addLine("Retomando la conversación…", running: true)
         } else if chat.turns.isEmpty {
@@ -799,6 +815,25 @@ final class AskModel {
         case "open":
             guard let id = message["ref"] as? String, let ref = refs[id], let file = ref["file"] as? String else { return }
             CodeEditor.current.open(URL(fileURLWithPath: file), line: message["line"] as? Int ?? ref["focus"] as? Int ?? 1)
+        case "pick":
+            // A pick in a card, a choice, a board or a next question: the chat's next question.
+            guard let text = (message["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty else { return }
+            let context = message["context"] as? [String: Any] ?? [:]
+            guard !working else {
+                // One answer at a time: it waits in the composer, never queued behind your back.
+                followUp = text
+                focusField()
+                return
+            }
+            let via = (context["block"] as? String).map {
+                ChatTurn.Via(turn: message["turn"] as? String ?? "", block: $0,
+                             choices: context["choices"] as? [String] ?? [])
+            }
+            ask(text, via: via, note: context["note"] as? String)
+        case "draft":
+            followUp = message["message"] as? String ?? ""
+            focusField()
         case "adapt":
             let path = message["path"] as? String ?? ""
             let from = (message["ref"] as? String).flatMap { refs[$0] }.map { "\($0["repo"] ?? "")/\($0["path"] ?? "")" }
@@ -857,6 +892,7 @@ final class AskModel {
             saved = "failed: \(problem)"
         }
         pushTrail()
+        bridge.busy(false)
         guard var chat else { return }
         chat.turns.append(ChatTurn(question: turnQuestion, asked: started, model: name, local: agentModel?.local ?? false,
                                    seconds: seconds, program: drawn,
@@ -864,7 +900,8 @@ final class AskModel {
                                                                          places: $0["places"] as? Bool) },
                                    summary: trailSummary ?? "",
                                    thinking: [narration, thinking].filter { !$0.isEmpty }.joined(separator: "\n\n"),
-                                   outcome: saved))
+                                   outcome: saved, via: turnVia))
+        turnVia = nil
         self.chat = chat
         chatLog.save(chat)
         refreshHistory()

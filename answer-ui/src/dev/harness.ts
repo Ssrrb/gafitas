@@ -18,6 +18,12 @@ const QUESTIONS: Record<string, string> = {
   "hashmap-idea": "¿Cómo crece una tabla hash?",
   "puzzle-max": "¿Cómo se conectan los tres proyectos?",
   "puzzle-min": "¿Quién envía de verdad una petición en requests?",
+  "retry-ways": "¿Cómo hago que requests reintente con espera?",
+  "retry-pick": "Quiero que mis peticiones reintenten",
+  "retry-board": "¿Qué me falta para tener reintentos con espera?",
+  "board-norefs": "¿Cómo añado reintentos a un cliente HTTP?",
+  "repos-matches": "¿Qué hace requests y qué hace urllib3?",
+  "broken-choices": "¿Dónde pongo los reintentos?",
 };
 
 const working: Trail = {
@@ -56,6 +62,7 @@ export async function runFixture(params: URLSearchParams) {
   // The page sits on the native sheet; paint it, so a screenshot measures the real contrast.
   document.body.style.background = "var(--g-sheet)";
   if (params.get("still") === "1") forceStill(true);
+  if (params.get("busy") === "1") api.busy(true);
   const thread = params.get("thread");
   if (thread) {
     const names = THREADS[thread] ?? [];

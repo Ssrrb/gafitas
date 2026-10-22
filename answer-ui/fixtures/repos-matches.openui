@@ -1,0 +1,8 @@
+root = Answer("requests y urllib3 se reparten el trabajo: requests elige el adaptador y prepara la petición; urllib3 elige el pool y la envía.", [m1, v1])
+a1 = Match("r7", "r6", "probable", "Eligen a quién pasar la petición")
+a2 = Match("r2:696-709", "r3:782", "segura", "Mandan la petición; requests delega")
+a3 = Match("r1:784", "", "segura", "urllib3 no tiene sesiones")
+m1 = Matches("requests frente a urllib3", [a1, a2, a3])
+d1 = Side("Session.get_adapter", "r7:876-878", ["Recorre los prefijos montados"])
+d2 = Side("PoolManager.connection_from_host", "r6", ["Busca o crea el pool del host"])
+v1 = SideBySide("Elegir a quién mandar la petición", d1, d2, "requests elige por el prefijo de la URL; urllib3, por host y puerto.")

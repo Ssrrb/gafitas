@@ -3,12 +3,13 @@
 // is HTML on top (real buttons, CSS clamping), so VoiceOver reads the pieces, joints and steps as lists.
 import * as React from "react";
 import type { ElementNode } from "@openuidev/lang-core";
+import { useTriggerAction } from "@openuidev/react-lang";
 import { post } from "../post";
 import { DEFAULT_WIDTH, layout, type Layout } from "../puzzle/layout";
 import { basename, readPuzzle, type PuzzleModel, type PuzzlePiece } from "../puzzle/model";
 import { KNOB_HALF, knobPath, knobSegment, tilePath } from "../puzzle/path";
 import { isStill } from "../still";
-import { TurnContext, useRefs, useSelected } from "../store";
+import { TurnContext, usePicks, useRefs, useSelected } from "../store";
 import { adaptAria, alsoJoint, linesAria, linesShort, puzzleAria, S, stepOf, stepsCount } from "../strings";
 import { Inline } from "./blocks";
 
@@ -60,16 +61,18 @@ const pieceAria = (piece: PuzzlePiece) => {
   return [piece.name, [piece.kind, piece.band].filter(Boolean).join(" de "), where, S.openCode].filter(Boolean).join(", ");
 };
 
-export function PuzzleBlock({ props }: { props: Record<string, unknown> }) {
+export function PuzzleBlock({ props, statementId }: { props: Record<string, unknown>; statementId?: string }) {
   const refs = useRefs();
   // Lay out only once the steps are in: pieces and joints are complete by then, so nothing reflows mid-stream.
   if (!Array.isArray(props.steps)) return null;
   const model = readPuzzle({ type: "element", typeName: "Puzzle", props } as unknown as ElementNode, refs);
   if (model.pieces.length < 2) return null;
-  return <Puzzle model={model} />;
+  return <Puzzle model={model} block={statementId} />;
 }
 
-function Puzzle({ model }: { model: PuzzleModel }) {
+function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
+  const trigger = useTriggerAction();
+  const { busy } = usePicks();
   const { pieces, joints, steps } = model;
   const selected = useSelected();
   const turn = React.useContext(TurnContext);
@@ -328,8 +331,29 @@ function Puzzle({ model }: { model: PuzzleModel }) {
 
         <footer className="g-puzzle-foot">
           <span className="g-hint">{S.hint}</span>
-          <span className="g-readout" aria-live="polite">
-            {readout}
+          <span className="g-walk-nav">
+            <span className="g-readout" aria-live="polite">
+              {readout}
+            </span>
+            {(() => {
+              // The lit or hovered piece, from inside: Pi answers with a walk through its lines.
+              const piece = hover !== null ? pieces[hover] : litPiece >= 0 ? pieces[litPiece] : undefined;
+              if (!piece?.ref || busy || turn.live) return null;
+              return (
+                <button
+                  type="button"
+                  className="g-link"
+                  onClick={() =>
+                    void trigger(`¿Cómo funciona «${piece.name}» por dentro?`, undefined, {
+                      type: "continue_conversation",
+                      params: { kind: "puzzle", block, choices: [piece.id], note: `The user asked to look inside ${piece.id} «${piece.name}» of your Puzzle ${block} in ${turn.id}.` },
+                    })
+                  }
+                >
+                  {S.inside} ›
+                </button>
+              );
+            })()}
           </span>
         </footer>
       </div>

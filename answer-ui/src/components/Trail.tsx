@@ -10,7 +10,24 @@ import type { RefEntry } from "../refs";
 const SHOWN = 8;
 
 /** The place's own name: "en HTTPAdapter.send" → "HTTPAdapter.send"; else the file. */
-export const placeName = (entry: RefEntry) => (entry.summary ?? "").replace(/^(en|in)\s+/, "").trim() || entry.path.split("/").pop() || entry.id;
+const DEF = /^\s*(?:async\s+)?(?:def|class|function|func|fn)\s+([\w$]+)/;
+
+// The summary is a symbol ("en Session.send") or, for a ref with none, its first line: keep just a def's or class's
+// name. Given a cited line, name the def or class that line sits in, when it isn't the summary's own.
+export const placeName = (entry: RefEntry, line?: number) => {
+  const summary = (entry.summary ?? "").replace(/^(en|in)\s+/, "").trim();
+  const own = summary.match(DEF)?.[1] ?? (summary.split(".").pop() || undefined);
+  if (line !== undefined) {
+    const lines = entry.text.split("\n");
+    for (let n = Math.min(line, entry.last) - entry.first; n >= 0; n--) {
+      const name = lines[n]?.match(DEF)?.[1];
+      if (!name) continue;
+      if (name !== own) return name;
+      break;
+    }
+  }
+  return summary.match(DEF)?.[1] ?? (summary || entry.path.split("/").pop() || entry.id);
+};
 
 function Places() {
   const refs = useRefs();

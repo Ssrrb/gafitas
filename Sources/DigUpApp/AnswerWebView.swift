@@ -57,7 +57,12 @@ final class AnswerBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate
 
     func refs(_ refs: [[String: Any]]) { call("refs", refs) }
     func reset() { call("reset") }
-    func turn(_ id: String, question: String) { call("turn", [id, question], spread: true) }
+    func turn(_ id: String, question: String, via: ChatTurn.Via? = nil) {
+        let picked: Any = via.map { ["turn": $0.turn, "block": $0.block, "choices": $0.choices] } ?? NSNull()
+        call("turn", [id, question, picked], spread: true)
+    }
+    /// Pi is answering: the page's picks wait.
+    func busy(_ on: Bool) { call("busy", on) }
     func trail(_ id: String, lines: [[String: Any]], summary: String?, thinking: String?) {
         var trail: [String: Any] = ["lines": lines]
         if let summary { trail["summary"] = summary }

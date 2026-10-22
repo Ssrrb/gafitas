@@ -1,0 +1,10 @@
+root = Answer("The index and the tool list don't share a shape, so they need an adapter between them.", [f1, x1])
+p1 = Part("Skill writer", "a_part", "r1", "Writes the skill folder")
+p2 = Part("Skills index", "a_port", "r2", "Records each skill")
+p3 = Part("Tool list", "b_port", "r5", "What the agent reads")
+s1 = Step(1, "Hermes writes a skill.")
+s2 = Step(3, "It should reach the tool list.")
+m1 = Coupling([p1, p2, p3], [s1, s2])
+f1 = Fig("Two shapes, no adapter", m1, "The index and the tool list don't fit together yet.")
+this line is not a statement
+x1 = Snippet("r2:40-52", "Where Hermes records a skill"

@@ -26,6 +26,12 @@ final class AgentRunner {
     private var message = ""
     private var sent = 0
     private(set) var busy = false
+    /// A conversation has started: the next question needs a fresh one first.
+    private var talked = false
+    /// The question waiting for `new_session` to finish (sent at once, it would be wiped by it).
+    private var afterReset: String?
+    /// The reply is corrected statements, not a whole program: all of it counts, not only from `root =`.
+    private var raw = false
 
     /// Pi's command: where your login shell finds it (a GUI app gets a bare PATH), else where its installers put it.
     static func locate() -> URL? {
@@ -103,6 +109,8 @@ final class AgentRunner {
 
     func stop() {
         stopping = true
+        talked = false
+        afterReset = nil
         process?.terminate()
         process = nil
         input = nil
@@ -110,12 +118,19 @@ final class AgentRunner {
 
     /// A question, after a fresh conversation (follow-ups keep it: `followUp`).
     func ask(_ message: String) {
+        guard talked else { return prompt(message) }
+        afterReset = message
+        busy = true
         send(["type": "new_session"])
-        prompt(message)
     }
 
     func followUp(_ message: String) {
         prompt(message)
+    }
+
+    /// Asks for corrected statements only; they come back as `.program` pieces, whole.
+    func correct(_ message: String) {
+        prompt(message, raw: true)
     }
 
     /// Something to take into account mid-answer ("set aside r4"); between answers it waits for the next prompt.
@@ -127,10 +142,12 @@ final class AgentRunner {
         send(["type": "abort"])
     }
 
-    private func prompt(_ message: String) {
+    private func prompt(_ message: String, raw: Bool = false) {
+        self.raw = raw
         var command: [String: Any] = ["type": "prompt", "message": message]
-        if busy { command["streamingBehavior"] = "followUp" }
+        if busy, afterReset == nil { command["streamingBehavior"] = "followUp" }
         busy = true
+        talked = true
         self.message = ""
         sent = 0
         send(command)
@@ -154,7 +171,11 @@ final class AgentRunner {
     private func handle(_ event: [String: Any]) {
         switch event["type"] as? String {
         case "response":
-            if event["success"] as? Bool == false {
+            if event["command"] as? String == "new_session", let message = afterReset {
+                afterReset = nil
+                busy = false
+                prompt(message)
+            } else if event["success"] as? Bool == false {
                 busy = false
                 onEvent(.failed(event["error"] as? String ?? "Pi didn't take the request"))
             } else if event["command"] as? String == "get_state",
@@ -196,10 +217,17 @@ final class AgentRunner {
         }
     }
 
-    /// The program starts at its `root =` line; a code fence around it is dropped.
+    /// The program starts at its `root =` line (corrected statements, at their first); a code fence around it is
+    /// dropped.
     private func emitProgram() {
-        guard let start = message.range(of: "root =") ?? message.range(of: "root=") else { return }
-        var program = String(message[start.lowerBound...])
+        var program: String
+        if raw {
+            guard let start = message.firstRange(of: /[A-Za-z_][A-Za-z0-9_]* *=/) else { return }
+            program = String(message[start.lowerBound...])
+        } else {
+            guard let start = message.range(of: "root =") ?? message.range(of: "root=") else { return }
+            program = String(message[start.lowerBound...])
+        }
         if let fence = program.range(of: "\n```") { program = String(program[..<fence.lowerBound]) }
         guard program.count > sent else { return }
         onEvent(.program(String(program.dropFirst(sent))))

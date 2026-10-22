@@ -66,8 +66,21 @@ final class AskWindowController: NSObject, NSWindowDelegate {
         app.windowClosed()
     }
 
+    /// The window into a PNG, the answer page in it too once `answerShot` holds the web view's own picture.
     func snapshot(to url: URL) throws {
-        try Snapshot.write(window, to: url)
+        let web = ask.bridge.webView
+        try Snapshot.write(window, to: url, overlay: answerShot.flatMap { web.window == nil ? nil : ($0, web) })
+    }
+
+    /// The answer page as WebKit draws it, for `snapshot` (`-debugAskAnswer`).
+    var answerShot: NSImage?
+
+    func captureAnswer(then done: @escaping () -> Void) {
+        ask.bridge.webView.takeSnapshot(with: nil) { [weak self] image, error in
+            if let error { log("ask: answer snapshot failed: \(error)") }
+            self?.answerShot = image
+            done()
+        }
     }
 
     // MARK: Keys
@@ -328,6 +341,8 @@ final class AskModel {
     @ObservationIgnored private var repair = ""
     @ObservationIgnored private var drawing = false
     @ObservationIgnored private var started = Date()
+    /// The program as it streamed, for the log (`-debugAskAnswer`).
+    @ObservationIgnored private var debugProgram = ""
 
     /// At most this many places: what fits the column, and what an answer can cite.
     static let placeLimit = 15
@@ -458,6 +473,11 @@ final class AskModel {
         }
     }
 
+    /// A repo's notes (README, docs) rather than its code.
+    private static func isDoc(_ row: ResultRow) -> Bool {
+        Rules.codeTextExtensions.contains(row.url.pathExtension.lowercased())
+    }
+
     /// A place in a line: what it defines, or, when it starts in the middle of something, what it's in ("in
     /// HTTPAdapter.send", "in def send(…" when there's no class), from the file around it.
     private static func summary(_ text: String, of row: ResultRow) async -> String {
@@ -572,7 +592,8 @@ final class AskModel {
             pending = prompt
             return
         }
-        if !agentModel.local, !Self.approvedProviders.contains(agentModel.provider), fresh {
+        if !agentModel.local, !Self.approvedProviders.contains(agentModel.provider), fresh,
+           !UserDefaults.standard.bool(forKey: "debugApproveProviders") {
             pending = prompt
             confirming = agentModel.provider
             return
@@ -581,7 +602,12 @@ final class AskModel {
     }
 
     private func send(_ prompt: String, fresh: Bool) {
-        if !fresh { bridge.reset() }
+        if !fresh {
+            // A follow-up's answer is drawn afresh, citing the same places (reset clears the page's table).
+            bridge.reset()
+            bridge.refs(refs.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.compactMap { refs[$0] }
+                .map(Self.forPage))
+        }
         answer = .working
         repaired = false
         repairing = false
@@ -638,6 +664,7 @@ final class AskModel {
                 if !drawing { progress = "Drawing the answer…" }
                 drawing = true
                 bridge.append(text)
+                if UserDefaults.standard.bool(forKey: "debugAskAnswer") { debugProgram += text }
             }
         case .refs(let found):
             let roots = model.settings.codeRoots.map(\.path), skipped = model.settings.codeExcluded.map(\.path)
@@ -657,6 +684,9 @@ final class AskModel {
                     + repos.formatted(.list(type: .and))
             }
         case .finished:
+            if UserDefaults.standard.bool(forKey: "debugAskAnswer") {
+                log("ask: \(repairing ? "repair" : "program"):\n\(repairing ? repair : debugProgram)")
+            }
             if repairing {
                 repairing = false
                 bridge.replace(repair)
@@ -683,13 +713,14 @@ final class AskModel {
             followUpField?.window?.makeFirstResponder(followUpField)
         case "errors":
             let errors = message["errors"] as? [[String: Any]] ?? []
-            if !errors.isEmpty, !repaired, agent.isRunning {
+            for error in errors { log("ask: undrawn \(error["id"] as? String ?? "?"): \(error["message"] as? String ?? "")") }
+            if !errors.isEmpty, !repaired, message["final"] as? Bool != true, agent.isRunning {
                 repaired = true
                 repairing = true
                 repair = ""
                 progress = "Fixing \(errors.count == 1 ? "a mistake" : "\(errors.count) mistakes") in the drawing…"
                 let lines = errors.map { "\($0["id"] as? String ?? "?"): \($0["message"] as? String ?? "")" }
-                agent.followUp("Reply with only the corrected statements, same ids:\n" + lines.joined(separator: "\n"))
+                agent.correct("Reply with only the corrected statements, same ids:\n" + lines.joined(separator: "\n"))
                 return
             }
             answer = .done
@@ -727,9 +758,14 @@ final class AskModel {
             try? await Task.sleep(until: showAt, tolerance: .milliseconds(1), clock: .continuous)
             guard !Task.isCancelled, current == generation else { return }
             let terms = Searcher.terms(text)
+            // Code first, then the repos' docs, each kind in rank order: a question about what's built is answered
+            // by code ("urllib3.request()" in a docs stub came before HTTPAdapter.send otherwise).
             let rows = hits.map { ResultRow($0, terms: terms) }.filter { row in
                 !skipped.contains { row.url.path.hasPrefix($0 + "/") }
-            }
+            }.enumerated().sorted { a, b in
+                let (aDoc, bDoc) = (Self.isDoc(a.element), Self.isDoc(b.element))
+                return aDoc == bDoc ? a.offset < b.offset : !aDoc
+            }.map(\.element)
             places = Array(rows.prefix(Self.placeLimit))
             ignored = []
             if !places.contains(where: { $0.id == selection }) { selection = places.first?.id }

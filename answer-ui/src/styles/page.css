@@ -1,0 +1,395 @@
+/* The answer page. Framed-sheet art direction: it draws no background of its own, so the native sheet shows
+   through and nothing flashes white. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  color: var(--g-text);
+  font: 15px/1.5 var(--g-font);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+code {
+  font-family: var(--g-mono);
+}
+
+.g-page {
+  --g-line: color-mix(in srgb, var(--g-text) 11%, var(--g-sheet));
+  --g-hover: color-mix(in srgb, var(--g-text) 5%, transparent);
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 20px 24px 40px;
+}
+
+.g-answer > * {
+  margin: 0;
+}
+
+.g-answer > :not(:first-child) {
+  margin-top: 28px;
+}
+
+.g-lede {
+  max-width: 34em;
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
+}
+
+.g-answer > .g-lede + :not(:first-child) {
+  margin-top: 20px;
+}
+
+.g-text,
+.g-callout,
+.g-caption,
+.g-check {
+  max-width: 68ch;
+  text-wrap: pretty;
+}
+
+.g-lede code,
+.g-text code,
+.g-callout code,
+.g-caption code,
+.g-step-text code,
+.g-check code,
+.g-side code,
+.g-what code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--g-fill);
+  font-size: 0.87em;
+}
+
+/* Chips: a tint dot, repo/path, a line badge. */
+.g-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px 0 7px;
+  border: 1px solid var(--g-line);
+  border-radius: 999px;
+  background: var(--g-sheet);
+  color: var(--g-text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.g-chip:hover {
+  background: var(--g-fill);
+}
+
+.g-chip:focus-visible,
+.g-button:focus-visible,
+.g-option:focus-visible,
+.g-steps button:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 1px;
+}
+
+.g-chip[data-selected] {
+  border-color: var(--g-amber);
+}
+
+.g-chip-text {
+  overflow: hidden;
+  font-family: var(--g-mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.g-chip[data-compact] {
+  height: 20px;
+  font-size: 11.5px;
+}
+
+.g-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--g-p1);
+}
+
+.g-dot[data-tint="2"] {
+  background: var(--g-p2);
+}
+
+.g-dot[data-tint="3"] {
+  background: var(--g-p3);
+}
+
+.g-dot[data-tint="4"] {
+  background: var(--g-p4);
+}
+
+.g-badge {
+  flex: none;
+  color: var(--g-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Snippet: the real lines from the ref table, the focus line in amber. */
+.g-snippet {
+  margin: 0;
+}
+
+.g-snippet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.g-snippet-note {
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+.g-code {
+  margin: 0;
+  padding: 8px 0;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--g-fill);
+  font: 12.5px/1.6 var(--g-mono);
+  tab-size: 4;
+}
+
+.g-code code {
+  display: block;
+  min-width: max-content;
+}
+
+.g-line {
+  display: block;
+  padding-right: 14px;
+  white-space: pre;
+  cursor: pointer;
+}
+
+.g-line:hover {
+  background: var(--g-hover);
+}
+
+.g-line[data-focus] {
+  background: color-mix(in srgb, var(--g-amber) 16%, transparent);
+}
+
+.g-ln {
+  display: inline-block;
+  width: calc(var(--g-gutter, 3ch) + 24px);
+  padding: 0 12px;
+  color: var(--g-faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.g-callout {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--g-fill);
+}
+
+.g-callout p {
+  margin: 0;
+}
+
+.g-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.g-side {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
+}
+
+.g-side h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.g-side ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.g-side li + li {
+  margin-top: 2px;
+}
+
+.g-section {
+  margin: 0 0 8px;
+  color: var(--g-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.g-newcode ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-newitem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
+}
+
+.g-newitem-main {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.g-path {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.g-adapts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--g-muted);
+  font-size: 12px;
+}
+
+.g-button {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
+  background: var(--g-sheet);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.g-button:hover {
+  background: var(--g-fill);
+}
+
+.g-check-q {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.g-options {
+  display: grid;
+  gap: 6px;
+}
+
+.g-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
+  background: var(--g-sheet);
+  text-align: left;
+  cursor: pointer;
+}
+
+.g-option:hover {
+  background: var(--g-fill);
+}
+
+.g-option-n {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--g-fill);
+  color: var(--g-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-option[data-state="right"] {
+  border-color: var(--g-moss);
+}
+
+.g-option[data-state="right"] .g-option-n {
+  background: var(--g-moss);
+  color: var(--g-sheet);
+}
+
+.g-option[data-state="wrong"] {
+  color: var(--g-muted);
+}
+
+.g-why {
+  min-height: 1.5em;
+  margin: 10px 0 0;
+}
+
+.g-notice {
+  margin: 24px 0 0;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .g-page {
+    padding: 16px 16px 32px;
+  }
+
+  .g-compare {
+    grid-template-columns: 1fr;
+  }
+
+  .g-newitem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .g-newitem .g-button {
+    align-self: flex-start;
+  }
+}

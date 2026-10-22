@@ -8,7 +8,10 @@ enum Snapshot {
         case noWindow, noBitmap
     }
 
-    static func write(_ window: NSWindow?, to url: URL, cornerRadius: CGFloat = 0) throws {
+    /// `overlay`: a picture drawn over the view where it shows (a web view's own snapshot: WebKit draws in another
+    /// process, out of `cacheDisplay`'s reach).
+    static func write(_ window: NSWindow?, to url: URL, cornerRadius: CGFloat = 0,
+                      overlay: (image: NSImage, view: NSView)? = nil) throws {
         guard let window, let content = window.contentView else { throw Failure.noWindow }
         let view = cornerRadius > 0 ? content : (content.superview ?? content)
         view.layoutSubtreeIfNeeded()
@@ -30,6 +33,7 @@ enum Snapshot {
                          yRadius: cornerRadius).fill()
         }
         image.draw(in: NSRect(origin: .zero, size: bounds.size))
+        if let overlay { overlay.image.draw(in: overlay.view.convert(overlay.view.bounds, to: view)) }
         NSGraphicsContext.restoreGraphicsState()
         guard let png = output.representation(using: .png, properties: [:]) else { throw Failure.noBitmap }
         try png.write(to: url)

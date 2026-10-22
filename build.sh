@@ -48,6 +48,9 @@ if xcrun --find actool > /dev/null 2>&1; then
 fi
 cp "$ICON" "$APP/Contents/Resources/AppIcon.icns"   # over actool's plainer fallback: ours has simplified 16 and 32 px
 cp Resources/Acknowledgements.txt "$APP/Contents/Resources/Acknowledgements.txt"
+# The Ask window's answer page (answer-ui/, built into Resources/answer-ui) and Pi's extension and instructions.
+scripts/build-answer-ui.sh
+cp -R Resources/answer-ui Resources/pi "$APP/Contents/Resources/"
 cp Resources/AppIcon/tray.png Resources/AppIcon/tray-dim.png Resources/AppIcon/tray-paused.png "$APP/Contents/Resources/"   # the menubar's logo
 
 # Sparkle (in-app updates): the framework in Frameworks/, where the app's runpath looks. Its XPC services are for

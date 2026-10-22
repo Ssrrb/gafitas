@@ -6,7 +6,7 @@ import WebKit
 /// The answer, drawn by the page in `Resources/answer-ui` (React and OpenUI, with the figure kit): a WKWebView that
 /// loads it from the app's own `gafitas://` scheme (nothing from the network: the page's CSP allows only itself) and
 /// the calls between it and Swift (`answer-ui/README.md`). Calls made before the page is ready wait for it.
-final class AnswerBridge: NSObject, WKScriptMessageHandler {
+final class AnswerBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     /// A message from the page: `open`, `hover`, `adapt`, `errors`.
     var onMessage: ([String: Any]) -> Void = { _ in }
     private(set) lazy var webView: WKWebView = makeWebView()
@@ -16,9 +16,12 @@ final class AnswerBridge: NSObject, WKScriptMessageHandler {
     private func makeWebView() -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(BundleSchemeHandler(), forURLScheme: "gafitas")
+        // An answer keeps drawing while you look at another app.
+        configuration.preferences.inactiveSchedulingPolicy = .none
         configuration.userContentController.add(WeakMessageHandler(self), name: "gafitas")
         let webView = AnswerWKWebView(frame: .zero, configuration: configuration)
         webView.onAppearanceChange = { [weak self] in self?.theme() }
+        webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")   // the sheet shows through: no white flash in dark mode
         webView.isInspectable = UserDefaults.standard.string(forKey: "defaultsSuite") != nil
         webView.load(URLRequest(url: URL(string: "gafitas://app/index.html")!))
@@ -27,6 +30,7 @@ final class AnswerBridge: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }
+        if body["type"] as? String != "hover" { log("answer page: \(body["type"] as? String ?? "?")") }
         if body["type"] as? String == "ready" {
             ready = true
             theme()
@@ -35,6 +39,18 @@ final class AnswerBridge: NSObject, WKScriptMessageHandler {
             return
         }
         onMessage(body)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        log("answer page didn't load: \(error)")
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        log("answer page failed: \(error)")
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        log("answer page: its process ended")
     }
 
     // MARK: Swift → page

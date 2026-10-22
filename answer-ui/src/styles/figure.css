@@ -1,0 +1,321 @@
+/* The figure card and how parts look when lit, hovered or new. */
+.g-fig {
+  margin: 0;
+}
+
+.g-card {
+  position: relative;
+  padding: 12px 14px 12px;
+  border: 1px solid var(--g-line);
+  border-radius: 12px;
+  background: var(--g-sheet);
+  touch-action: pan-y;
+}
+
+.g-card:focus {
+  outline: none;
+}
+
+.g-card:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 2px;
+}
+
+.g-corners {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  color: var(--g-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-fig-title {
+  color: var(--g-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  text-wrap: balance;
+}
+
+.g-fig-n {
+  flex: none;
+}
+
+.g-readout {
+  color: var(--g-text);
+  text-align: right;
+}
+
+.g-hint {
+  flex: none;
+}
+
+.g-stage {
+  margin: 4px 0;
+}
+
+.g-machine {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.g-caption {
+  margin: 10px 2px 0;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+/* Steps: the current one is what the figure lights. */
+.g-steps {
+  display: grid;
+  gap: 2px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-steps button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--g-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.g-steps button:hover {
+  background: var(--g-hover);
+}
+
+.g-steps li[aria-current] button {
+  background: var(--g-fill);
+  color: var(--g-text);
+}
+
+.g-step-n {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--g-fill);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-steps li[aria-current] .g-step-n {
+  background: var(--g-amber);
+  color: var(--g-sheet);
+}
+
+/* Legend: numbered pins, label, chip, note. */
+.g-legend {
+  display: grid;
+  gap: 2px;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--g-line);
+  list-style: none;
+  font-size: 13px;
+}
+
+.g-legend li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+
+.g-legend li[data-hover],
+.g-legend li:hover {
+  background: var(--g-hover);
+}
+
+.g-pin {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--g-line);
+  border-radius: 999px;
+  color: var(--g-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-legend li[data-lit] .g-pin {
+  border-color: var(--g-amber);
+  color: var(--g-amber);
+}
+
+.g-legend li[data-selected] {
+  background: color-mix(in srgb, var(--g-amber) 10%, transparent);
+}
+
+.g-part-label {
+  font-weight: 500;
+}
+
+.g-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--g-fill);
+  color: var(--g-text);
+  font-size: 11px;
+}
+
+.g-part-note {
+  flex-basis: 100%;
+  padding-left: 28px;
+  color: var(--g-muted);
+}
+
+@media (min-width: 760px) {
+  .g-legend {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 12px;
+  }
+
+  .g-legend li {
+    align-content: flex-start;
+  }
+}
+
+/* Parts in the drawing. */
+.g-part[role="button"] {
+  cursor: pointer;
+}
+
+.g-part:focus {
+  outline: none;
+}
+
+.g-screw {
+  fill: var(--anatomy-dot);
+  stroke: none;
+  fill-opacity: 0.5;
+}
+
+.g-part[data-status="new"] .iso-solid > .iso-edge {
+  stroke: var(--anatomy-lo);
+}
+
+.g-part[data-status="new"] .iso-solid > .iso-crease,
+.g-part[data-status="new"] .iso-solid > .iso-bevel {
+  stroke: var(--anatomy-faint);
+}
+
+.g-part[data-status="new"] .iso-solid > .iso-top {
+  fill: var(--anatomy-paper);
+}
+
+.g-part[data-hover] .iso-solid > .iso-edge,
+.g-part:focus-visible .iso-solid > .iso-edge {
+  stroke: var(--anatomy-hi);
+  stroke-width: 1.1px;
+}
+
+/* Lit: the one colour. Four tones kept, tinted amber, so the part keeps its form. */
+.g-part[data-lit] .iso-solid > .iso-edge {
+  stroke: var(--anatomy-lit);
+}
+
+.g-part[data-lit] .iso-solid > .iso-crease,
+.g-part[data-lit] .iso-solid > .iso-bevel {
+  stroke: color-mix(in srgb, var(--anatomy-lit) 55%, var(--anatomy-paper));
+}
+
+.g-part[data-lit] .iso-solid > .iso-fill {
+  fill: var(--anatomy-lit-face);
+}
+
+.g-part[data-lit] .iso-solid > .iso-top {
+  fill: var(--anatomy-lit-top);
+}
+
+.g-part[data-lit] .iso-solid > .iso-shade[data-shade="0"] {
+  fill: color-mix(in srgb, var(--anatomy-lit) 16%, var(--anatomy-shade-0));
+}
+
+.g-part[data-lit] .iso-solid > .iso-shade[data-shade="1"] {
+  fill: color-mix(in srgb, var(--anatomy-lit) 18%, var(--anatomy-shade-1));
+}
+
+.g-part[data-lit] .iso-solid > .iso-shade[data-shade="2"] {
+  fill: color-mix(in srgb, var(--anatomy-lit) 20%, var(--anatomy-shade-2));
+}
+
+.g-part[data-lit] .iso-solid > .iso-shade[data-shade="3"] {
+  fill: color-mix(in srgb, var(--anatomy-lit) 22%, var(--anatomy-shade-3));
+}
+
+.g-part[data-lit] .iso-solid[data-seamless] > .iso-shade[data-shade="0"] {
+  stroke: color-mix(in srgb, var(--anatomy-lit) 16%, var(--anatomy-shade-0));
+}
+
+.g-part[data-lit] .iso-solid[data-seamless] > .iso-shade[data-shade="1"] {
+  stroke: color-mix(in srgb, var(--anatomy-lit) 18%, var(--anatomy-shade-1));
+}
+
+.g-part[data-lit] .iso-solid[data-seamless] > .iso-shade[data-shade="2"] {
+  stroke: color-mix(in srgb, var(--anatomy-lit) 20%, var(--anatomy-shade-2));
+}
+
+.g-part[data-lit] .iso-solid[data-seamless] > .iso-shade[data-shade="3"] {
+  stroke: color-mix(in srgb, var(--anatomy-lit) 22%, var(--anatomy-shade-3));
+}
+
+.g-part[data-lit] .iso-solid[data-seamless] > .iso-top {
+  stroke: var(--anatomy-lit-top);
+}
+
+.g-part[data-lit] .g-screw {
+  fill: var(--anatomy-lit);
+}
+
+.g-part[data-lit][data-hover] .iso-solid > .iso-edge,
+.g-part[data-lit]:focus-visible .iso-solid > .iso-edge {
+  stroke: var(--anatomy-lit);
+  stroke-width: 1.2px;
+}
+
+@media (max-width: 560px) {
+  .g-card {
+    padding: 10px 10px 10px;
+  }
+
+  /* On a phone the machine would be small: scale it up inside the card and let the margins crop. */
+  .g-stage {
+    overflow: hidden;
+    margin: 0 -10px;
+  }
+
+  .g-stage .g-machine {
+    width: 122%;
+    margin: -4% -11% -5%;
+  }
+
+  .g-corners[data-row="bottom"] {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .g-readout {
+    text-align: left;
+  }
+}

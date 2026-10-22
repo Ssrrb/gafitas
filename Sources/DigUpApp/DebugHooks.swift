@@ -44,7 +44,9 @@ import SwiftUI
 ///                             settings:general|folders|code|storage, settings:add (Folders with Add Folders open),
 ///                             settings:addcode (Code with its folders' sheet open),
 ///                             onboarding:welcome|folders|code|shortcut|ready, ask (with -debugQuery, and
-///                             -debugSelect NAME to select a place, -debugAskTab map for the map)
+///                             -debugSelect NAME to select a place, -debugAskTab map for the map,
+///                             -debugAskAnswer YES to ask for the answer and wait for it; -debugApproveProviders YES
+///                             skips the privacy sheet)
 ///                             (-debugCloseWindow YES closes it afterwards, to measure what closing gives back;
 ///                             -debugWindowAfter S opens it S seconds after launch, once the helper has reported)
 ///     -debugChoices "open:real;click:real/videos;add:<path>"   before the snapshot, act on the folder list of
@@ -357,9 +359,23 @@ enum DebugHooks {
                     }
                 }
                 if defaults.string(forKey: "debugAskTab") == "map" { ask.tab = .map }
+                // -debugAskAnswer YES: ask for the answer too, and wait for it (and the page's own picture).
+                let answering = defaults.bool(forKey: "debugAskAnswer")
+                var shot = false
+                if answering {
+                    waitUntil({ ask.dug }, deadline: Date().addingTimeInterval(30)) { ask.askNow() }
+                    waitUntil({ ask.answer == .done || { if case .failed = ask.answer { true } else { false } }() },
+                              deadline: Date().addingTimeInterval(300)) {
+                        log("ask: answer \(ask.answer) · \(ask.progress)")
+                        // The figure's motion settles, then WebKit draws it for the snapshot.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            app.askWindow.captureAnswer { shot = true }
+                        }
+                    }
+                }
                 loaded = {
                     (ask.trimmed.isEmpty || (ask.dug && (defaults.string(forKey: "debugSelect") == nil || ask.navigated)))
-                        && (ask.tab != .map || ask.map != nil)
+                        && (ask.tab != .map || ask.map != nil) && (!answering || shot)
                 }
                 draw = { try app.askWindow.snapshot(to: $0) }
                 close = { app.askWindow.close() }
@@ -375,7 +391,7 @@ enum DebugHooks {
             let keys = defaults.string(forKey: "debugKeys")?.split(separator: ",").map {
                 $0.trimmingCharacters(in: .whitespaces)
             } ?? []
-            waitUntil(loaded, deadline: Date().addingTimeInterval(30)) {
+            waitUntil(loaded, deadline: Date().addingTimeInterval(defaults.bool(forKey: "debugAskAnswer") ? 330 : 30)) {
                 log("window: \(page) loaded in \(ms(since: started)) (after a 0.5 s launch delay)")
                 if let list = choices() { act(on: list) }
                 waitUntil({ choices()?.estimatesDone ?? true }, deadline: Date().addingTimeInterval(30)) {

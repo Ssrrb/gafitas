@@ -53,7 +53,7 @@ public enum Rules {
         "metal", "glsl", "hlsl", "wgsl", "cu", "cuh", "ino", "v", "sv", "tex",
     ]
     /// What goes with code: a repo's docs and its settings.
-    static let codeTextExtensions: Set<String> = [
+    public static let codeTextExtensions: Set<String> = [
         "md", "markdown", "rst", "adoc", "org", "typ", "txt", "yaml", "yml", "toml",
     ]
     /// Code known by its name alone.

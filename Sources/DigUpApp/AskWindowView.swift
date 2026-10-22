@@ -27,6 +27,9 @@ struct AskWindowView: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 980, minHeight: 620)
+        .sheet(item: Binding(get: { ask.confirming.map(Provider.init) }, set: { if $0 == nil { ask.confirming = nil } })) {
+            PrivacySheet(ask: ask, provider: $0.name)
+        }
     }
 
     private var header: some View {
@@ -98,6 +101,10 @@ struct AskWindowView: View {
                 .lineLimit(1)
                 .help("Code folders and indexing")
             Spacer()
+            if let agent = ask.agentModel {
+                Text("Answers by \(agent.name) " + (agent.local ? "on this Mac" : "via \(PrivacySheet.title(agent.provider))"))
+                    .lineLimit(1)
+            }
         }
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
@@ -163,7 +170,7 @@ private struct PlacesColumn: View {
                         ForEach(group.rows) { row in
                             PriorArtCard(row: row, summary: ask.summaries[row.id], path: ask.pathInRepo(row),
                                          selected: row.id == ask.selectedRow?.id,
-                                         reuse: { ask.reuse(row) }, adapt: {}, ignore: { ask.ignore(row) })
+                                         reuse: { ask.reuse(row) }, adapt: { ask.adapt(row) }, ignore: { ask.ignore(row) })
                                 .id(row.id)
                                 .onTapGesture(count: 2) { ask.reuse(row) }
                                 .onTapGesture { ask.select(row) }

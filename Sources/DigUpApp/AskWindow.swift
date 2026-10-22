@@ -60,6 +60,7 @@ final class AskWindowController: NSObject, NSWindowDelegate {
             QLPreviewPanel.shared().orderOut(nil)
         }
         removeKeyMonitor()
+        ask.closeAgent()
         window?.contentView = nil
         window = nil
         app.windowClosed()
@@ -105,6 +106,11 @@ final class AskWindowController: NSObject, NSWindowDelegate {
         switch event.keyCode {
         case 125, 126 where modifiers.isEmpty:   // ↓ ↑
             ask.move(by: event.keyCode == 125 ? 1 : -1)
+        case 36, 76 where modifiers == .option && ask.navigated:   // ⌥↩
+            guard let row else { return false }
+            ask.adapt(row)
+        case 36, 76 where event.window?.firstResponder === ask.followUpField?.currentEditor():   // ↩ in the follow-up
+            ask.sendFollowUp()
         case 36, 76:   // ↩
             if modifiers == .command, let row {
                 NSWorkspace.shared.activateFileViewerSelecting([row.url])
@@ -124,6 +130,10 @@ final class AskWindowController: NSObject, NSWindowDelegate {
             toggleQuickLook()
         case 16 where modifiers == .command:   // ⌘Y
             toggleQuickLook()
+        case 38 where modifiers == .command:   // ⌘J
+            ask.followUpField?.window?.makeFirstResponder(ask.followUpField)
+        case 47 where modifiers == .command && ask.answer == .working:   // ⌘.
+            ask.stop()
         case 37 where modifiers == .command:   // ⌘L
             ask.editing()
             ask.focusField()
@@ -137,6 +147,8 @@ final class AskWindowController: NSObject, NSWindowDelegate {
         case 53:   // Esc
             if previewing {
                 QLPreviewPanel.shared().orderOut(nil)
+            } else if ask.answer == .working {
+                ask.stop()
             } else if !ask.question.isEmpty {
                 ask.question = ""
             } else {
@@ -175,6 +187,24 @@ struct Project: Identifiable, Equatable {
     var name: String { (path as NSString).lastPathComponent }
 }
 
+/// Where the answer is.
+enum AnswerPhase: Equatable {
+    case idle
+    /// Pi isn't installed.
+    case needsPi
+    case working
+    case done
+    case failed(String)
+}
+
+/// The model Pi answers with.
+struct AgentModel: Equatable {
+    let name: String
+    let provider: String
+    /// It runs on this Mac (nothing is sent anywhere).
+    let local: Bool
+}
+
 /// The places found in one repo, under its name.
 struct PlaceGroup: Identifiable {
     let name: String
@@ -203,14 +233,45 @@ final class AskModel {
     private(set) var ignored: [ResultRow] = []
     /// The places are for the question as it is now.
     private(set) var dug = false
-    var selection: String?
+    var selection: String? {
+        didSet { if selection != oldValue { bridge.select(selection.flatMap { refIDs[$0] }) } }
+    }
     /// You moved through the places with the arrow keys since the last edit: ↩, ⌫ and Space act on them then.
     private(set) var navigated = false
+
+    // The answer.
+    private(set) var answer = AnswerPhase.idle
+    /// What Pi is doing, in a line: "Reading tools/registry.py…", "Answered by DeepSeek V4.1 Flash in 41 s".
+    private(set) var progress = ""
+    /// The model Pi answers with, once Pi has said.
+    private(set) var agentModel: AgentModel?
+    /// The question the answer on the sheet is for.
+    private(set) var answered = ""
+    var followUp = ""
+    /// The figure part under the pointer cites this place: its card shows it.
+    private(set) var hovered: String?
+    /// Waiting for Continue on the privacy sheet: the provider it would go to.
+    var confirming: String?
+
     @ObservationIgnored weak var field: NSTextField?
+    @ObservationIgnored weak var followUpField: NSTextField?
+    @ObservationIgnored let bridge = AnswerBridge()
+    @ObservationIgnored private let agent = AgentRunner()
     @ObservationIgnored private let engine: Engine
     @ObservationIgnored private let model: AppModel
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var task: Task<Void, Never>?
+    /// The places the answer may cite, by ref id ("r3", "d1"): what the page draws and what a click may open.
+    @ObservationIgnored private var refs: [String: [String: Any]] = [:]
+    /// A place's ref id, by its row id.
+    @ObservationIgnored private var refIDs: [String: String] = [:]
+    @ObservationIgnored private var answerWhenDug = false
+    @ObservationIgnored private var pending: String?
+    @ObservationIgnored private var repairing = false
+    @ObservationIgnored private var repaired = false
+    @ObservationIgnored private var repair = ""
+    @ObservationIgnored private var drawing = false
+    @ObservationIgnored private var started = Date()
 
     /// At most this many places: what fits the column, and what an answer can cite.
     static let placeLimit = 15
@@ -221,6 +282,8 @@ final class AskModel {
     init(engine: Engine, model: AppModel) {
         self.engine = engine
         self.model = model
+        agent.onEvent = { [weak self] in self?.received($0) }
+        bridge.onMessage = { [weak self] in self?.page($0) }
     }
 
     var trimmed: String { question.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -303,6 +366,7 @@ final class AskModel {
 
     func ignore(_ row: ResultRow) {
         guard let index = places.firstIndex(where: { $0.id == row.id }) else { return }
+        if let id = refIDs[row.id] { agent.steer("Set aside \(id): the user says it doesn't fit.") }
         places.remove(at: index)
         ignored.append(row)
         if selection == row.id { selection = places[safe: min(index, places.count - 1)]?.id }
@@ -325,10 +389,230 @@ final class AskModel {
         }
     }
 
-    /// ↩ in the question field: the places at once, without waiting for the typing pause.
+    /// ↩ in the question field: the places at once (without waiting for the typing pause), then the answer.
     func askNow() {
         guard !trimmed.isEmpty else { return }
-        if !dug { dig(now: true) }
+        if dug || !engine.hasCode {
+            startAnswer()
+        } else {
+            answerWhenDug = true
+            dig(now: true)
+        }
+    }
+
+    /// Adapt…: a follow-up about making this place fit, ready to send.
+    func adapt(_ row: ResultRow) {
+        let id = refIDs[row.id].map { " (\($0))" } ?? ""
+        followUp = "How would I adapt \(summaries[row.id] ?? row.name)\(id) for this?"
+        followUpField?.window?.makeFirstResponder(followUpField)
+    }
+
+    func sendFollowUp() {
+        let text = followUp.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, agent.isRunning else { return }
+        followUp = ""
+        begin(text, fresh: false)
+    }
+
+    func stop() {
+        agent.abort()
+    }
+
+    func closeAgent() {
+        agent.stop()
+    }
+
+    func approve(_ provider: String, always: Bool) {
+        if always {
+            UserDefaults.standard.set(Array(Set(Self.approvedProviders + [provider])), forKey: "approvedProviders")
+        }
+        confirming = nil
+        if let pending { send(pending, fresh: true) }
+        pending = nil
+    }
+
+    func cancelConfirm() {
+        confirming = nil
+        pending = nil
+        answer = .idle
+    }
+
+    private static var approvedProviders: [String] {
+        UserDefaults.standard.stringArray(forKey: "approvedProviders") ?? []
+    }
+
+    // MARK: The answer
+
+    /// Pi, the places as refs, and the question: the privacy sheet first when the model isn't on this Mac.
+    private func startAnswer() {
+        guard let pi = AgentRunner.locate() else {
+            answer = .needsPi
+            return
+        }
+        answered = trimmed
+        let roots = model.settings.codeRoots.filter { !leftOut.contains($0.path) }
+        do {
+            try agent.start(pi: pi, roots: roots, index: model.settings.indexDirectory,
+                            models: model.settings.modelsDirectory)
+        } catch {
+            answer = .failed("Pi didn't start: \(error.localizedDescription)")
+            return
+        }
+        answer = .working
+        progress = "Reading the places it found…"
+        let places = self.places, question = trimmed
+        Task {
+            refs = [:]
+            refIDs = [:]
+            var list: [[String: Any]] = []
+            for (index, row) in places.enumerated() {
+                let id = "r\(index + 1)"
+                guard let text = await engine.text(ofSegment: row.segmentID, code: true) else { continue }
+                let ref = ref(id: id, row: row, text: text)
+                refs[id] = ref
+                refIDs[row.id] = id
+                list.append(ref)
+            }
+            bridge.reset()
+            bridge.refs(list.map(Self.forPage))
+            bridge.select(selection.flatMap { refIDs[$0] })
+            begin(Self.prompt(question, refs: list), fresh: true)
+        }
+    }
+
+    /// Sends it once the model is known and allowed: a model off this Mac needs a yes first (once per provider).
+    private func begin(_ prompt: String, fresh: Bool) {
+        guard let agentModel else {
+            pending = prompt
+            return
+        }
+        if !agentModel.local, !Self.approvedProviders.contains(agentModel.provider), fresh {
+            pending = prompt
+            confirming = agentModel.provider
+            return
+        }
+        send(prompt, fresh: fresh)
+    }
+
+    private func send(_ prompt: String, fresh: Bool) {
+        if !fresh { bridge.reset() }
+        answer = .working
+        repaired = false
+        repairing = false
+        drawing = false
+        started = Date()
+        if fresh { agent.ask(prompt) } else { agent.followUp(prompt) }
+    }
+
+    private func ref(id: String, row: ResultRow, text: String) -> [String: Any] {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        let first = Int(row.loc ?? 1)
+        return ["id": id, "repo": repoName(row), "path": pathInRepo(row), "file": row.url.path, "first": first,
+                "last": first + min(lines.count, Self.refLines) - 1, "focus": Int(row.focus ?? row.loc ?? 1),
+                "summary": summaries[row.id] ?? CodeExtractor.summary(text),
+                "text": lines.prefix(Self.refLines).joined(separator: "\n"), "tint": project(of: row)?.index ?? 3]
+    }
+
+    /// What the page gets of a ref: everything but where the file is on this Mac.
+    private static func forPage(_ ref: [String: Any]) -> [String: Any] {
+        ref.filter { $0.key != "file" }
+    }
+
+    /// At most this many lines of each place go to the model and the page.
+    static let refLines = 40
+
+    private static func prompt(_ question: String, refs: [[String: Any]]) -> String {
+        var text = "Question: \(question)\n\n"
+        if refs.isEmpty {
+            text += "Gafitas found no places in the user's projects for this. Answer from what you know, with concept parts.\n"
+        } else {
+            text += "Places Gafitas dug up in the user's projects (cite them by id):\n"
+            for ref in refs {
+                text += "\n\(ref["id"]!) · \(ref["repo"]!)/\(ref["path"]!), lines \(ref["first"]!)-\(ref["last"]!) "
+                    + "(\(ref["file"]!))\n\(ref["text"]!)\n"
+            }
+        }
+        return text
+    }
+
+    private func received(_ event: AgentRunner.Event) {
+        switch event {
+        case .model(let name, let provider, let local):
+            agentModel = AgentModel(name: name, provider: provider, local: local)
+            if let pending, confirming == nil {
+                self.pending = nil
+                begin(pending, fresh: true)
+            }
+        case .progress(let line):
+            progress = line
+        case .program(let text):
+            if repairing {
+                repair += text
+            } else {
+                if !drawing { progress = "Drawing the answer…" }
+                drawing = true
+                bridge.append(text)
+            }
+        case .refs(let found):
+            let roots = model.settings.codeRoots.map(\.path), skipped = model.settings.codeExcluded.map(\.path)
+            var added: [[String: Any]] = []
+            for var ref in found {
+                // The extension checked them; the app checks again before the page may open one.
+                guard let id = ref["id"] as? String, let file = ref["file"] as? String,
+                      FolderSelection.isSearched(file, folders: roots, skipped: skipped) else { continue }
+                ref["tint"] = projects.filter { file.hasPrefix($0.path + "/") }.map(\.index).first ?? 3
+                refs[id] = ref
+                added.append(ref)
+            }
+            if !added.isEmpty {
+                bridge.refs(added.map(Self.forPage))
+                let repos = Set(added.compactMap { $0["repo"] as? String }).sorted()
+                progress = "Found \(added.count) more \(added.count == 1 ? "place" : "places") in "
+                    + repos.formatted(.list(type: .and))
+            }
+        case .finished:
+            if repairing {
+                repairing = false
+                bridge.replace(repair)
+            } else if answer == .working {
+                bridge.done()
+            }
+        case .failed(let problem):
+            answer = .failed(problem)
+            log("ask: answer failed: \(problem)")
+        }
+    }
+
+    /// The page: a figure part opened, hovered or adapted, or what it couldn't draw.
+    private func page(_ message: [String: Any]) {
+        switch message["type"] as? String {
+        case "open":
+            guard let id = message["ref"] as? String, let ref = refs[id], let file = ref["file"] as? String else { return }
+            CodeEditor.current.open(URL(fileURLWithPath: file), line: message["line"] as? Int ?? ref["focus"] as? Int ?? 1)
+        case "hover":
+            hovered = (message["ref"] as? String).flatMap { id in refIDs.first { $0.value == id }?.key }
+        case "adapt":
+            let id = message["ref"] as? String ?? ""
+            followUp = "How would I adapt \(id)\((message["path"] as? String).map { " into \($0)" } ?? "")?"
+            followUpField?.window?.makeFirstResponder(followUpField)
+        case "errors":
+            let errors = message["errors"] as? [[String: Any]] ?? []
+            if !errors.isEmpty, !repaired, agent.isRunning {
+                repaired = true
+                repairing = true
+                repair = ""
+                progress = "Fixing \(errors.count == 1 ? "a mistake" : "\(errors.count) mistakes") in the drawing…"
+                let lines = errors.map { "\($0["id"] as? String ?? "?"): \($0["message"] as? String ?? "")" }
+                agent.followUp("Reply with only the corrected statements, same ids:\n" + lines.joined(separator: "\n"))
+                return
+            }
+            answer = .done
+            let seconds = Int(Date().timeIntervalSince(started).rounded())
+            progress = "Answered by \(agentModel?.name ?? "the model") in \(seconds) s"
+            log("ask: answered in \(seconds) s, \(errors.count) left undrawn")
+        default:
+            break
+        }
     }
 
     private func dig(now: Bool = false) {
@@ -363,6 +647,10 @@ final class AskModel {
             ignored = []
             if !places.contains(where: { $0.id == selection }) { selection = places.first?.id }
             dug = true
+            if answerWhenDug {
+                answerWhenDug = false
+                startAnswer()
+            }
             for row in places where summaries[row.id] == nil {
                 guard let text = await engine.text(ofSegment: row.segmentID, code: true), current == generation
                 else { continue }

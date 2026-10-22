@@ -816,7 +816,7 @@ nonisolated final class Engine: @unchecked Sendable {
         }
     }
 
-    private static func appendingHandle(_ url: URL) -> FileHandle {
+    static func appendingHandle(_ url: URL) -> FileHandle {
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
         }

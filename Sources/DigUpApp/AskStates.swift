@@ -8,6 +8,78 @@ struct AnswerSheet: View {
     let app: AppController
 
     var body: some View {
+        switch ask.answer {
+        case .idle: before
+        case .needsPi: needsPi
+        case .working, .done, .failed: drawn
+        }
+    }
+
+    /// The answer as it's drawn: what Pi is doing, the page, and a follow-up under it.
+    private var drawn: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                if ask.answer == .working { ProgressView().controlSize(.small) }
+                Text(ask.progress)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer()
+                if ask.answer == .working {
+                    Button("Stop", action: ask.stop).controlSize(.small).help("Stop the answer (⌘.)")
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 34)
+            if case .failed(let problem) = ask.answer {
+                Text("The answer stopped partway: \(problem). What it drew so far stays.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
+            }
+            AnswerWebView(bridge: ask.bridge)
+            Divider()
+            HStack(spacing: 8) {
+                SearchField(text: $ask.followUp, fontSize: 13,
+                            placeholder: "Ask a follow-up: “what if a skill needs keys?”",
+                            onMake: { ask.followUpField = $0 })
+                    .frame(height: 20)
+                Button("Ask", action: ask.sendFollowUp)
+                    .controlSize(.small)
+                    .disabled(ask.followUp.trimmingCharacters(in: .whitespaces).isEmpty || ask.answer == .working)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+        }
+    }
+
+    private var needsPi: some View {
+        SheetMessage(title: "Pi isn't installed",
+                     message: "Gafitas writes answers with the Pi coding agent. Install it in Terminal, then check "
+                         + "again. The places it found are on the left.") {
+            VStack(spacing: 10) {
+                Text(Self.installCommand)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.06)))
+                HStack {
+                    Button("Copy Command") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(Self.installCommand, forType: .string)
+                    }
+                    Button("Check Again", action: ask.askNow).keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+    }
+
+    static let installCommand = "npm install -g @earendil-works/pi-coding-agent"
+
+    @ViewBuilder private var before: some View {
         if !model.hasCode && ask.trimmed.isEmpty {
             SheetMessage(title: "No projects yet",
                          message: "Add a folder with code and Gafitas reads it on this Mac. You can still ask; the "
@@ -67,5 +139,50 @@ struct SheetMessage<Actions: View>: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The provider a question would go to, for the privacy sheet.
+struct Provider: Identifiable {
+    let name: String
+    var id: String { name }
+}
+
+/// Before the first question goes to a model off this Mac: what's sent, to whom, and what isn't.
+struct PrivacySheet: View {
+    let ask: AskModel
+    let provider: String
+    @State private var always = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Send this question to \(Self.title(provider))?")
+                .font(.system(size: 15, weight: .semibold))
+            Text("To write the answer, Gafitas sends your question and the \(placesLine) it found to \(Self.title(provider)) "
+                 + "through Pi. Nothing else leaves this Mac: not your other files, not the index.")
+                .font(.system(size: 13))
+                .fixedSize(horizontal: false, vertical: true)
+            Toggle("Don't ask again for \(Self.title(provider))", isOn: $always)
+                .font(.system(size: 12))
+            HStack {
+                Spacer()
+                Button("Cancel", action: ask.cancelConfirm).keyboardShortcut(.cancelAction)
+                Button("Send to \(Self.title(provider))") { ask.approve(provider, always: always) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+
+    private var placesLine: String {
+        let count = ask.places.count
+        return count == 1 ? "1 place" : "\(count) places"
+    }
+
+    /// "opencode-go" → "Opencode Go", "anthropic" → "Anthropic".
+    static func title(_ provider: String) -> String {
+        provider.split(whereSeparator: { $0 == "-" || $0 == "_" }).map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
     }
 }

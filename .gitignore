@@ -20,9 +20,6 @@ evals/*.local.json
 
 .DS_Store
 
-# The Tauri shell (shell/): Cargo builds and the schemas tauri-build writes
-shell/src-tauri/target/
-shell/src-tauri/gen/
-# What scripts/package-*.sh gather for the packages
-shell/src-tauri/helper/
-shell/src-tauri/THIRD-PARTY-NOTICES.txt
+# The Ask window's answer page: its packages, and what scripts/build-answer-ui.sh builds from it
+answer-ui/node_modules/
+Resources/answer-ui/

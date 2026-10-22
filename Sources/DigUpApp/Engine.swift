@@ -831,9 +831,11 @@ nonisolated final class Engine: @unchecked Sendable {
     /// shows while the query encoder starts. Files that are gone (deleted since the last sync, or on a drive that's
     /// unplugged) are left out.
     /// `code`: the code index (its own folders), never anything else.
+    /// `zGate`: how far a meaning match must stand out in code; the Ask window's questions take 1.5 (two projects in
+    /// one question: neither side stands out at 2, evals/prior-art.json).
     func search(_ text: String, vector: QueryVector?, prefixLast: Bool, kinds: Set<FileKind>? = nil,
-                limit: Int = 40, code: Bool = false) async -> [SearchHit] {
-        if code { return await searchCode(text, vector: vector, prefixLast: prefixLast, limit: limit) }
+                limit: Int = 40, code: Bool = false, zGate: Double = 2.0) async -> [SearchHit] {
+        if code { return await searchCode(text, vector: vector, prefixLast: prefixLast, limit: limit, zGate: zGate) }
         return await withCheckedContinuation { continuation in
             searchQueue.async { [self] in
                 var values = vector?.values
@@ -862,14 +864,16 @@ nonisolated final class Engine: @unchecked Sendable {
         }
     }
 
-    private func searchCode(_ text: String, vector: QueryVector?, prefixLast: Bool, limit: Int) async -> [SearchHit] {
+    private func searchCode(_ text: String, vector: QueryVector?, prefixLast: Bool, limit: Int,
+                            zGate: Double) async -> [SearchHit] {
         await withCheckedContinuation { continuation in
             searchQueue.async { [self] in
                 let (roots, skipped) = lock.withLock { (codeRoots.map(\.path), codeExcluded.map(\.path)) }
                 guard !roots.isEmpty, let codeSearcher else { return continuation.resume(returning: []) }
                 var values = vector?.values
                 if let vector, let indexed = codeSearcher.vectorSource, indexed != vector.source { values = nil }
-                let hits = (try? codeSearcher.search(text, queryVector: values, limit: limit, prefixLast: prefixLast)) ?? []
+                let hits = (try? codeSearcher.search(text, queryVector: values, limit: limit, zGate: zGate,
+                                                     prefixLast: prefixLast)) ?? []
                 continuation.resume(returning: hits.filter { hit in
                     FolderSelection.isSearched(hit.path, folders: roots, skipped: skipped)
                         && FileManager.default.fileExists(atPath: hit.path)

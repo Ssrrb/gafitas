@@ -43,7 +43,8 @@ import SwiftUI
 ///     -debugWindow PAGE       open a window instead of the panel and snapshot it: search (with -debugQuery),
 ///                             settings:general|folders|code|storage, settings:add (Folders with Add Folders open),
 ///                             settings:addcode (Code with its folders' sheet open),
-///                             onboarding:welcome|folders|code|shortcut|ready
+///                             onboarding:welcome|folders|code|shortcut|ready, ask (with -debugQuery, and
+///                             -debugSelect NAME to select a place)
 ///                             (-debugCloseWindow YES closes it afterwards, to measure what closing gives back;
 ///                             -debugWindowAfter S opens it S seconds after launch, once the helper has reported)
 ///     -debugChoices "open:real;click:real/videos;add:<path>"   before the snapshot, act on the folder list of
@@ -347,6 +348,17 @@ enum DebugHooks {
                 loaded = { onboarding.state.isLoaded }
                 draw = { try onboarding.snapshot(to: $0) }
                 close = { onboarding.close() }
+            case "ask":
+                app.showAsk(question: defaults.string(forKey: "debugQuery") ?? "")
+                let ask = app.askWindow.ask
+                if let pick = defaults.string(forKey: "debugSelect") {
+                    waitUntil({ ask.dug }, deadline: Date().addingTimeInterval(30)) {
+                        if let row = ask.places.first(where: { $0.name.contains(pick) }) { ask.select(row) }
+                    }
+                }
+                loaded = { ask.trimmed.isEmpty || (ask.dug && (defaults.string(forKey: "debugSelect") == nil || ask.navigated)) }
+                draw = { try app.askWindow.snapshot(to: $0) }
+                close = { app.askWindow.close() }
             default:
                 app.showSearchWindow(query: defaults.string(forKey: "debugQuery") ?? "")
                 let search = app.searchWindow.search

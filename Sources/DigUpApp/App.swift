@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(ActionMenuItem("New Search", key: "n") { [weak app] in app?.showSearchWindow(query: "") })
+        fileMenu.addItem(ActionMenuItem("Ask About Your Code…", key: "N") { [weak app] in app?.showAsk() })
         fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 
         let editMenu = NSMenu(title: "Edit")

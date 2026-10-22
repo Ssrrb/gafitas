@@ -17,6 +17,8 @@ struct ResultRow: Identifiable, Equatable {
     let excerpt: String?    // matched words are wrapped in « »
     let matchedMeaning: Bool
     let matchedWords: Bool
+    /// How far the meaning match stood out (`SearchHit.z`): the Ask window's closeness.
+    let z: Double?
     let modified: Date
     let size: Int64
     let info: [String: String]
@@ -41,6 +43,7 @@ struct ResultRow: Identifiable, Equatable {
         locEnd = hit.locEnd
         focus = hit.focus
         excerpt = hit.excerpt.flatMap { $0.isEmpty ? nil : $0 }
+        z = hit.z
         matchedMeaning = (hit.z ?? 0) >= 2
         matchedWords = hit.keywordRank != nil
         modified = Date(timeIntervalSince1970: hit.modified)

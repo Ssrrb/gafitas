@@ -434,6 +434,8 @@ struct Passage: View {
 /// are marked, the line it opens at is lit, and the card opens scrolled to it. Long lines run past the edge.
 struct CodeLines: View {
     let row: ResultRow
+    /// "lines 12–40" in the corner (a card that says it already leaves it out).
+    var showsSpan = true
     @State private var text: String?
 
     var body: some View {
@@ -466,7 +468,7 @@ struct CodeLines: View {
         }
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.045)))
         .overlay(alignment: .bottomTrailing) {
-            if let span = row.span { PlaceBadge(text: span, onImage: true).padding(8) }
+            if showsSpan, let span = row.span { PlaceBadge(text: span, onImage: true).padding(8) }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.1),

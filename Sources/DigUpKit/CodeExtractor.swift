@@ -127,7 +127,7 @@ public enum CodeExtractor {
 
     /// A stretch in one line, for result lists: its first line that defines something ("def retry_with_backoff(…"),
     /// else its first line of code (not a comment, an import or a closing brace).
-    static func summary(_ text: String) -> String {
+    public static func summary(_ text: String) -> String {
         let lines = text.split(whereSeparator: { $0 == "\n" || $0 == "\r\n" })
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         let definition = lines.first { line in

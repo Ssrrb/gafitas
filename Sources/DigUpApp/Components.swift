@@ -17,6 +17,18 @@ enum Brand {
     static let tile = LinearGradient(colors: [leaf, moss], startPoint: .top, endPoint: .bottom)
     /// The soft glow behind onboarding's steps.
     static let wash = LinearGradient(colors: [sprout, leaf], startPoint: .topLeading, endPoint: .bottomTrailing)
+
+    /// A code folder's tint in the Ask window (its chip, its places, its dots on the map): leaf, cobalt, rose, at least
+    /// 60° of hue apart, a lighter one in dark mode. A fourth folder and on are gray.
+    static func projectTint(_ index: Int) -> Color {
+        let tints: [(light: UInt32, dark: UInt32)] = [(0x4F8058, 0xA2C78E), (0x2F6FB0, 0x6FA3E0), (0xB8336A, 0xE07AA6)]
+        guard let tint = tints[safe: index] else { return Color.secondary }
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? tint.dark : tint.light
+            return NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
+                           blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+        })
+    }
 }
 
 /// ⇧ ⌘ Space as keycaps.

@@ -18,6 +18,7 @@ final class AppController {
     private let schedule: IndexSchedule
     private(set) var panel: SearchPanelController!
     private(set) var searchWindow: SearchWindowController!
+    private(set) var askWindow: AskWindowController!
     private(set) var settingsWindow: SettingsWindowController!
     private(set) var statusMenu: StatusMenuController!
     private(set) var onboarding: OnboardingController?
@@ -59,10 +60,12 @@ final class AppController {
     func start(showWindow: Bool = false) {
         panel = SearchPanelController(app: self)
         searchWindow = SearchWindowController(app: self)
+        askWindow = AskWindowController(app: self)
         settingsWindow = SettingsWindowController(app: self)
         statusMenu = StatusMenuController(model: model)
         statusMenu.onSearch = { [weak self] in self?.panel.show() }
         statusMenu.onOpenWindow = { [weak self] in self?.showSearchWindow() }
+        statusMenu.onAsk = { [weak self] in self?.showAsk() }
         statusMenu.onSettings = { [weak self] in self?.showSettings() }
         statusMenu.onChooseFolders = { [weak self] in self?.chooseFolders() }
         statusMenu.onPauseChanged = { [weak self] paused in self?.engine.setPaused(paused) }
@@ -273,6 +276,10 @@ final class AppController {
         searchWindow.show(query: query, kind: kind)
     }
 
+    func showAsk(question: String? = nil) {
+        askWindow.show(question: question)
+    }
+
     func showSettings(_ tab: SettingsTab = .general) {
         settingsWindow.show(tab)
     }
@@ -305,7 +312,7 @@ final class AppController {
     /// A window closed: the Dock icon goes once none is left.
     func windowClosed() {
         DispatchQueue.main.async { [self] in
-            let open = [searchWindow?.isVisible, settingsWindow?.isVisible, onboarding?.isVisible]
+            let open = [searchWindow?.isVisible, askWindow?.isVisible, settingsWindow?.isVisible, onboarding?.isVisible]
                 .contains { $0 == true }
             if !open {
                 NSApp.setActivationPolicy(.accessory)

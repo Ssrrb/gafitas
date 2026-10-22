@@ -393,6 +393,13 @@ final class AskModel {
     func confirmDelete(_ id: String) {
         guard !(working && chat?.id == id) else { return }
         let questions = history.first { $0.id == id }?.questions ?? chat?.turns.count ?? 1
+        guard Self.deleteAlert(questions: questions).runModal() == .alertFirstButtonReturn else { return }
+        chatLog.delete(id)
+        if chat?.id == id { newQuestion() }
+        refreshHistory()
+    }
+
+    static func deleteAlert(questions: Int) -> NSAlert {
         let alert = NSAlert()
         alert.messageText = "¿Eliminar esta conversación?"
         alert.informativeText = questions == 1
@@ -400,10 +407,7 @@ final class AskModel {
             : "Se borran de este Mac sus \(questions) preguntas y respuestas. No se puede deshacer."
         alert.addButton(withTitle: "Eliminar").hasDestructiveAction = true
         alert.addButton(withTitle: "Cancelar")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        chatLog.delete(id)
-        if chat?.id == id { newQuestion() }
-        refreshHistory()
+        return alert
     }
 
     // MARK: Asking

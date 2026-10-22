@@ -162,13 +162,18 @@ final class SettingsState {
     /// Ready to be drawn (debug snapshots wait for this).
     private(set) var isLoaded = false
 
-    /// Almacenamiento → Borrar el historial…: asks first, then deletes every saved chat.
-    func deleteHistory() {
+    static func historyAlert() -> NSAlert {
         let alert = NSAlert()
         alert.messageText = "¿Borrar todo el historial?"
         alert.informativeText = "Se borran de este Mac todas tus conversaciones. No se puede deshacer."
         alert.addButton(withTitle: "Borrar").hasDestructiveAction = true
         alert.addButton(withTitle: "Cancelar").keyEquivalent = "\u{1b}"
+        return alert
+    }
+
+    /// Almacenamiento → Borrar el historial…: asks first, then deletes every saved chat.
+    func deleteHistory() {
+        let alert = Self.historyAlert()
         let done = { [self] (response: NSApplication.ModalResponse) in
             guard response == .alertFirstButtonReturn else { return }
             app.chatLog.deleteAll()

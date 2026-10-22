@@ -16,6 +16,9 @@ import SwiftUI
 ///                             Settings would; "off" turns code search off)
 ///     -debugIcon <png>        draw the menubar icon idle, at 0%, 42% and 90%, and paused (at 4×, 2× and 1×)
 ///     -debugHotkeyCheck a,b   log what the shortcut recorder would say about each combination ("cmd+space"…)
+///     -debugDialogs <png>     draw the privacy sheet, the delete-chat alert and the delete-history alert into
+///                             <png>-privacy.png, -delete.png, -history.png (with -debugAskChat ID, the sheet counts
+///                             that chat's places)
 ///     -debugMenuView <png>    draw the top of the menu (status, detail, progress) into <png>, after
 ///                             -debugMenuViewAfter seconds
 ///     -debugWindow PAGE       open a window and snapshot it:
@@ -45,7 +48,7 @@ import SwiftUI
 enum DebugHooks {
     /// A debug run that decides what to show (the window a launch by hand opens would get in its way).
     static var drivesUI: Bool {
-        ["debugOnboarding", "debugWindow", "debugLoginItem", "debugWaitForIndex", "debugMenu", "debugMenuView",
+        ["debugOnboarding", "debugWindow", "debugLoginItem", "debugWaitForIndex", "debugMenu", "debugMenuView", "debugDialogs",
          "debugIcon"].contains { UserDefaults.standard.object(forKey: $0) != nil }
     }
 
@@ -110,6 +113,14 @@ enum DebugHooks {
                 let free = combo == app.model.hotkey || GlobalHotkey(combo, action: {}) != nil
                 log("hotkey check: \(combo.display): " + (combo.systemConflict ?? (free ? "free" : "taken by another app")))
             }
+        }
+        if let path = defaults.string(forKey: "debugDialogs") {
+            if let id = defaults.string(forKey: "debugAskChat") { app.openChat(id) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                drawDialogs(app, to: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+                if defaults.bool(forKey: "debugQuit") { NSApp.terminate(nil) }
+            }
+            return
         }
         if let path = defaults.string(forKey: "debugMenuView") {
             DispatchQueue.main.asyncAfter(deadline: .now() + defaults.double(forKey: "debugMenuViewAfter")) {
@@ -383,6 +394,20 @@ enum DebugHooks {
     private static func waitUntil(_ condition: @escaping () -> Bool, deadline: Date, then body: @escaping () -> Void) {
         if condition() || Date() > deadline { return body() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { waitUntil(condition, deadline: deadline, then: body) }
+    }
+
+    /// The dialogs offscreen runs can't show: drawn from the same code the app runs them with.
+    private static func drawDialogs(_ app: AppController, to url: URL) {
+        let base = url.deletingPathExtension().path
+        let sheet = NSHostingView(rootView: PrivacySheet(ask: app.askWindow.ask, provider: "opencode-go"))
+        sheet.frame.size = sheet.fittingSize
+        let window = NSWindow(contentRect: sheet.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = sheet
+        save("privacy sheet", { try Snapshot.write(window, to: $0) }, to: URL(fileURLWithPath: base + "-privacy.png"))
+        for (name, alert) in [("delete", AskModel.deleteAlert(questions: 2)), ("history", SettingsState.historyAlert())] {
+            alert.layout()
+            save("\(name) alert", { try Snapshot.write(alert.window, to: $0) }, to: URL(fileURLWithPath: base + "-\(name).png"))
+        }
     }
 
     /// The menu's header view, as it would show if the menu opened now.

@@ -1,28 +1,19 @@
 {
-  "fill" : {
-    "solid" : "srgb:0.07451,0.12549,0.10196,1.00000"
+  "fill": {
+    "solid": "srgb:0.12157,0.25490,0.78431,1.00000"
   },
-  "groups" : [
+  "groups": [
     {
-      "layers" : [
+      "layers": [
         {
-          "image-name" : "d-mark.svg",
-          "name" : "d-mark"
+          "image-name": "gafitas.png",
+          "name": "gafitas"
         }
       ],
-      "name" : "D"
-    },
-    {
-      "layers" : [
-        {
-          "image-name" : "tiles.svg",
-          "name" : "tiles"
-        }
-      ],
-      "name" : "Tiles"
+      "name": "Gafitas"
     }
   ],
-  "supported-platforms" : {
-    "squares" : "shared"
+  "supported-platforms": {
+    "squares": "shared"
   }
 }

@@ -1,25 +1,13 @@
-# DigUp's icon: "One space"
+# Gafitas's icon
 
-Four tiles, for what DigUp searches (text, pictures, sound, video), around an amber D with the find glowing in it.
-Moss palette.
+Green sunglasses on blue watercolor: little glasses, for seeing how code fits together.
 
-- `appicon.svg`: the app icon (1024 × 1024, macOS icon grid). `../AppIcon.icns` holds it at 64 px and up.
-- `appicon-small.svg`: the same without the glyphs inside the tiles, which turn to noise when small. `../AppIcon.icns`
-  holds it at 16 and 32 px.
-- `AppIcon.icon`: the same design as layers for macOS 26 and later (an Icon Composer document: a #13201A fill, the
-  tiles, the D). `build.sh` compiles it into `Assets.car` with `actool`; `Info.plist`'s `CFBundleIconName` points at
-  it. Without it macOS 26 draws the `.icns` shrunk inside a gray square. Older macOS uses the `.icns`
-  (`CFBundleIconFile`; untested there).
-- `tray.svg`: the logo in the menubar and in the Windows and Linux tray: `appicon-small.svg` cropped to its rounded
-  square, without the drop shadow. `tray-dim.svg` (the tiles dimmed: indexing, their color coming back in a sweep as it
-  goes) and `tray-paused.svg` (two bars in the D's place). Each is rendered to its `.png` at 64 px (WebKit, for the
-  glow); `StatusIcon` (`Sources/DigUpApp/StatusMenu.swift`) and the shell's `tray_icon.rs` draw from those.
-- `menubar.svg`: the menubar's earlier mark, a boxed D, in one color (until 2026-10-13).
-
-To rebuild `AppIcon.icns` after editing a source: render both SVGs to an iconset (`icon_16x16.png` and
-`icon_16x16@2x.png`/`icon_32x32.png` from `appicon-small.svg` at 16 and 32 px; the other eight sizes, 64 to 1024 px,
-from `appicon.svg`) with a renderer that draws SVG blur filters (a browser or WebKit; macOS's own SVG renderer drops
-the soft shadows), then `iconutil -c icns AppIcon.iconset -o ../AppIcon.icns`.
-
-Colors: tile #13201A; tiles #D5E6BB, #A2C78E, #64976B, #356652; the D #FFD166 → #F2A22A with a #13201A outline; the
-find #FFF6DA.
+- `gafitas.png`: the picture, edge to edge. `scripts/make-icon.py` makes the rest from it.
+- `../AppIcon.icns`: the picture in the macOS icon grid (an 824 px rounded square on 1024, with its shadow), 16 to
+  1024 px, for Finder, the Dock and macOS before 26 (`CFBundleIconFile`).
+- `AppIcon.icon`: the picture as the one layer of an Icon Composer document. `build.sh` compiles it into `Assets.car`
+  with Xcode's `actool` (`CFBundleIconName`); macOS 26 draws a full-size icon only from that, and without Xcode it
+  shows the `.icns` inside a gray square.
+- `tray.svg`, `tray-dim.svg`, `tray-paused.svg` and their `.png`s: the menubar mark, still DigUp's (four tiles around
+  a D, the tiles' color coming back in a sweep while indexing; two bars when paused). `StatusIcon`
+  (`Sources/DigUpApp/StatusMenu.swift`) draws from the `.png`s.

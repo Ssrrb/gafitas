@@ -277,7 +277,7 @@ public enum CodeExtractor {
         "less": "Less", "gradle": "Gradle", "cmake": "CMake", "mk": "Makefile", "proto": "Protocol Buffers",
         "graphql": "GraphQL", "gql": "GraphQL", "tf": "Terraform", "hcl": "HCL", "nix": "Nix", "zig": "Zig",
         "hs": "Haskell", "ex": "Elixir", "exs": "Elixir", "erl": "Erlang", "clj": "Clojure", "cljs": "ClojureScript",
-        "elm": "Elm", "ml": "OCaml", "mli": "OCaml", "vim": "Vim script", "el": "Emacs Lisp", "lisp": "Lisp",
+        "elm": "Elm", "ml": "OCaml", "mli": "OCaml", "lean": "Lean", "vim": "Vim script", "el": "Emacs Lisp", "lisp": "Lisp",
         "asm": "Assembly", "s": "Assembly", "metal": "Metal", "glsl": "GLSL", "hlsl": "HLSL", "wgsl": "WGSL",
         "cu": "CUDA", "cuh": "CUDA", "ino": "Arduino", "v": "Verilog", "sv": "SystemVerilog", "tex": "LaTeX",
         "md": "Markdown", "markdown": "Markdown", "rst": "reStructuredText", "adoc": "AsciiDoc", "org": "Org",
@@ -332,6 +332,7 @@ public enum CodeLookup {
         "def", "func", "fn", "fun", "function", "class", "struct", "enum", "protocol", "interface", "trait", "type",
         "typealias", "actor", "extension", "impl", "module", "namespace", "object", "record", "macro", "const", "let",
         "var", "val", "union", "mod", "sub", "@interface", "@implementation", "@protocol", "#define", "function*",
+        "theorem", "lemma", "structure", "inductive", "abbrev", "opaque",  // Lean
     ]
     /// Words before a name that mean it's being used, not defined ("await name(…)", "return name(…)").
     private static let users: Set<String> = [

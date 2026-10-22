@@ -1426,5 +1426,154 @@
    "text": "    def get_adapter(self, url: str) -> BaseAdapter:\n        \"\"\"\n        Returns the appropriate connection adapter for the given URL.\n\n        :rtype: requests.adapters.BaseAdapter\n        \"\"\"\n        for prefix, adapter in self.adapters.items():\n            if url.lower().startswith(prefix.lower()):\n                return adapter\n\n        # Nothing matches :-/\n        raise InvalidSchema(f\"No connection adapters were found for {url!r}\")\n\n    def close(self) -> None:\n        \"\"\"Closes all adapters and as such the session\"\"\"\n        for v in self.adapters.values():\n            v.close()\n\n    def mount(self, prefix: str, adapter: BaseAdapter) -> None:\n        \"\"\"Registers a connection adapter to a prefix.\n\n        Adapters are sorted in descending order by prefix length.\n        \"\"\"\n        self.adapters[prefix] = adapter\n        keys_to_move = [k for k in self.adapters if len(k) < len(prefix)]\n\n        for key in keys_to_move:\n            self.adapters[key] = self.adapters.pop(key)\n\n    def __getstate__(self) -> dict[str, Any]:\n        state = {attr: getattr(self, attr, None) for attr in self.__attrs__}\n        return state\n\n    def __setstate__(self, state: dict[str, Any]) -> None:\n        for attr, value in state.items():\n            setattr(self, attr, value)\n\n\ndef session() -> Session:\n    \"\"\"",
    "tint": 0
   }
+ ],
+ "lean-integrate": [
+  {
+   "id": "r1",
+   "repo": "lean4",
+   "path": "src/kernel/environment.cpp",
+   "first": 191,
+   "last": 208,
+   "focus": 204,
+   "summary": "en environment::add_theorem",
+   "text": "environment environment::add_theorem(declaration const & d, bool check) const {\n    scoped_diagnostics diag(*this, check);\n    theorem_val const & v = d.to_theorem_val();\n    if (check) {\n        type_checker checker(*this, diag.get());\n        sharecommon_persistent_fn share;\n        expr val(share(v.get_value().raw()));\n        expr type(share(v.get_type().raw()));\n        check_constant_val(*this, v.to_constant_val(), checker);\n        if (!checker.is_prop(type))\n            throw theorem_type_is_not_prop(*this, v.get_name(), type);\n        check_no_metavar_no_fvar(*this, v.get_name(), val);\n        expr val_type = checker.check(val, v.get_lparams());\n        if (!checker.is_def_eq(val_type, type))\n            throw definition_type_mismatch_exception(*this, d, val_type);\n    }\n    return diag.update(add(constant_info(d)));\n}",
+   "tint": 0
+  },
+  {
+   "id": "r2",
+   "repo": "lean4",
+   "path": "src/kernel/type_checker.cpp",
+   "first": 173,
+   "last": 187,
+   "focus": 185,
+   "summary": "en type_checker::infer_app",
+   "text": "expr type_checker::infer_app(expr const & e, bool infer_only) {\n    if (!infer_only) {\n        expr f_type = ensure_pi_core(infer_type_core(app_fn(e), infer_only), e);\n        expr a_type = infer_type_core(app_arg(e), infer_only);\n        expr d_type = binding_domain(f_type);\n        if (is_eager_reduce(app_arg(e))) {\n            // If argument is of the form `eagerReduce`, set m_eager_reduction mode\n            flet<bool> scope(m_eager_reduce, true);\n            if (!is_def_eq(a_type, d_type)) {\n                throw app_type_mismatch_exception(env(), m_lctx, e, f_type, a_type);\n            }\n        } else if (!is_def_eq(a_type, d_type)) {\n            throw app_type_mismatch_exception(env(), m_lctx, e, f_type, a_type);\n        }\n        return instantiate(binding_body(f_type), app_arg(e));",
+   "tint": 0
+  },
+  {
+   "id": "r3",
+   "repo": "repl",
+   "path": "REPL/Main.lean",
+   "first": 296,
+   "last": 310,
+   "focus": 305,
+   "summary": "en runCommand",
+   "text": "def runCommand (s : Command) : M IO (CommandResponse ⊕ Error) := do\n  let (cmdSnapshot?, notFound) ← do match s.env with\n  | none => pure (none, false)\n  | some i => do match (← get).cmdStates[i]? with\n    | some env => pure (some env, false)\n    | none => pure (none, true)\n  if notFound then\n    return .inr ⟨\"Unknown environment.\"⟩\n  let initialCmdState? := cmdSnapshot?.map fun c => c.cmdState\n  let (initialCmdState, cmdState, messages, trees) ← try\n    IO.processInput s.cmd initialCmdState?\n  catch ex =>\n    return .inr ⟨ex.toString⟩\n  let messages ← messages.mapM fun m => Message.of m\n  -- For debugging purposes, sometimes we print out the trees here:",
+   "tint": 1
+  },
+  {
+   "id": "r4",
+   "repo": "pi",
+   "path": "packages/coding-agent/src/core/extensions/loader.ts",
+   "first": 292,
+   "last": 303,
+   "focus": 298,
+   "summary": "en registerTool",
+   "text": "\t\tregisterTool(tool: ToolDefinition): void {\n\t\t\tassertActive();\n\t\t\tif (typeof tool.parameters !== \"object\" || tool.parameters === null || Array.isArray(tool.parameters)) {\n\t\t\t\tthrow new Error(\n\t\t\t\t\t`Tool \"${tool.name}\" registered by extension \"${extension.path}\" must define an object parameter schema.`,\n\t\t\t\t);\n\t\t\t}\n\t\t\textension.tools.set(tool.name, {\n\t\t\t\tdefinition: tool,\n\t\t\t\tsourceInfo: extension.sourceInfo,\n\t\t\t});\n\t\t\truntime.refreshTools();",
+   "tint": 2
+  },
+  {
+   "id": "r5",
+   "repo": "pi",
+   "path": "packages/coding-agent/examples/extensions/hello.ts",
+   "first": 1,
+   "last": 26,
+   "focus": 17,
+   "summary": "en helloTool",
+   "text": "/**\n * Hello Tool - Minimal custom tool example\n */\n\nimport { Type } from \"@earendil-works/pi-ai\";\nimport { defineTool, type ExtensionAPI } from \"@earendil-works/pi-coding-agent\";\n\nconst helloTool = defineTool({\n\tname: \"hello\",\n\tlabel: \"Hello\",\n\tdescription: \"A simple greeting tool\",\n\tparameters: Type.Object({\n\t\tname: Type.String({ description: \"Name to greet\" }),\n\t}),\n\n\tasync execute(_toolCallId, params, _signal, _onUpdate, _ctx) {\n\t\treturn {\n\t\t\tcontent: [{ type: \"text\", text: `Hello, ${params.name}!` }],\n\t\t\tdetails: { greeted: params.name },\n\t\t};\n\t},\n});\n\nexport default function (pi: ExtensionAPI) {\n\tpi.registerTool(helloTool);\n}",
+   "tint": 2
+  },
+  {
+   "id": "r6",
+   "repo": "lean4",
+   "path": "src/kernel/environment.cpp",
+   "first": 282,
+   "last": 295,
+   "focus": 293,
+   "summary": "en lean_add_decl",
+   "text": "/*\naddDeclCore (env : Environment) (maxHeartbeats : USize) (maxRecDepth : USize) (decl : @& Declaration)\n  (cancelTk? : @& Option IO.CancelToken) : Except Kernel.Exception Environment\n*/\nextern \"C\" LEAN_EXPORT object * lean_add_decl(object * env, size_t max_heartbeat, size_t max_rec_depth,\n    object * decl, object * opt_cancel_tk) {\n    scope_max_heartbeat s(max_heartbeat);\n    scope_max_rec_depth s2(max_rec_depth);\n    scope_cancel_tk s3(is_scalar(opt_cancel_tk) ? nullptr : cnstr_get(opt_cancel_tk, 0));\n    return catch_kernel_exceptions<environment>([&]() {\n            return environment(env).add(declaration(decl, true));\n        });\n}\n",
+   "tint": 0
+  }
+ ],
+ "pi-lean-tool": [
+  {
+   "id": "r1",
+   "repo": "pi",
+   "path": "packages/agent/src/agent-loop.ts",
+   "first": 718,
+   "last": 757,
+   "focus": 737,
+   "summary": "en prepareToolCall",
+   "text": "async function prepareToolCall(\n\tcurrentContext: AgentContext,\n\tassistantMessage: AssistantMessage,\n\ttoolCall: AgentToolCall,\n\tconfig: ToolCallHooks,\n\tsignal: AbortSignal | undefined,\n\ttools: readonly AgentTool<any>[] = currentContext.tools ?? [],\n): Promise<PreparedToolCall | ImmediateToolCallOutcome> {\n\tconst tool = tools.find((t) => t.name === toolCall.name);\n\tif (!tool) {\n\t\treturn {\n\t\t\tkind: \"immediate\",\n\t\t\tresult: createErrorToolResult(`Tool ${toolCall.name} not found`),\n\t\t\tisError: true,\n\t\t};\n\t}\n\n\ttry {\n\t\tconst preparedToolCall = prepareToolCallArguments(tool, toolCall);\n\t\tconst validatedArgs = validateToolArguments(tool, preparedToolCall);\n\t\tif (config.beforeToolCall) {\n\t\t\tconst beforeResult = await config.beforeToolCall(\n\t\t\t\t{\n\t\t\t\t\tassistantMessage,\n\t\t\t\t\ttoolCall,\n\t\t\t\t\targs: validatedArgs,\n\t\t\t\t\tcontext: currentContext,\n\t\t\t\t},\n\t\t\t\tsignal,\n\t\t\t);\n\t\t\tif (signal?.aborted) {\n\t\t\t\treturn {\n\t\t\t\t\tkind: \"immediate\",\n\t\t\t\t\tresult: createErrorToolResult(\"Operation aborted\"),\n\t\t\t\t\tisError: true,\n\t\t\t\t};\n\t\t\t}\n\t\t\tif (beforeResult?.block) {\n\t\t\t\tconst result = createErrorToolResult(beforeResult.reason || \"Tool execution was blocked\");\n\t\t\t\tif (beforeResult.terminate === true) {",
+   "tint": 2
+  },
+  {
+   "id": "r2",
+   "repo": "pi",
+   "path": "packages/agent/src/agent-loop.ts",
+   "first": 831,
+   "last": 867,
+   "focus": 842,
+   "summary": "en executePreparedToolCall",
+   "text": "async function executePreparedToolCall(\n\tprepared: PreparedToolCall,\n\tsignal: AbortSignal | undefined,\n\tonUpdate: ToolUpdateSink,\n): Promise<ExecutedToolCallOutcome> {\n\tconst updateEvents: Promise<void>[] = [];\n\tlet acceptingUpdates = true;\n\tconst startedAt = performance.now();\n\tconst elapsed = () => Math.round(performance.now() - startedAt);\n\n\ttry {\n\t\tconst result = await prepared.tool.execute(\n\t\t\tprepared.toolCall.id,\n\t\t\tprepared.args as never,\n\t\t\tsignal,\n\t\t\t(partialResult) => {\n\t\t\t\tif (!acceptingUpdates) return;\n\t\t\t\tupdateEvents.push(Promise.resolve(onUpdate(partialResult)));\n\t\t\t},\n\t\t);\n\t\tconst durationMs = elapsed();\n\t\tacceptingUpdates = false;\n\t\tawait Promise.all(updateEvents);\n\t\treturn { result, isError: result.isError === true, durationMs };\n\t} catch (error) {\n\t\tconst durationMs = elapsed();\n\t\tacceptingUpdates = false;\n\t\tawait Promise.all(updateEvents);\n\t\treturn {\n\t\t\tresult: createErrorToolResult(error instanceof Error ? error.message : String(error)),\n\t\t\tisError: true,\n\t\t\tdurationMs,\n\t\t};\n\t} finally {\n\t\tacceptingUpdates = false;\n\t}\n}",
+   "tint": 2
+  },
+  {
+   "id": "r3",
+   "repo": "pi",
+   "path": "packages/coding-agent/examples/extensions/hello.ts",
+   "first": 1,
+   "last": 26,
+   "focus": 17,
+   "summary": "en helloTool",
+   "text": "/**\n * Hello Tool - Minimal custom tool example\n */\n\nimport { Type } from \"@earendil-works/pi-ai\";\nimport { defineTool, type ExtensionAPI } from \"@earendil-works/pi-coding-agent\";\n\nconst helloTool = defineTool({\n\tname: \"hello\",\n\tlabel: \"Hello\",\n\tdescription: \"A simple greeting tool\",\n\tparameters: Type.Object({\n\t\tname: Type.String({ description: \"Name to greet\" }),\n\t}),\n\n\tasync execute(_toolCallId, params, _signal, _onUpdate, _ctx) {\n\t\treturn {\n\t\t\tcontent: [{ type: \"text\", text: `Hello, ${params.name}!` }],\n\t\t\tdetails: { greeted: params.name },\n\t\t};\n\t},\n});\n\nexport default function (pi: ExtensionAPI) {\n\tpi.registerTool(helloTool);\n}",
+   "tint": 2
+  },
+  {
+   "id": "r4",
+   "repo": "repl",
+   "path": "REPL/Main.lean",
+   "first": 296,
+   "last": 310,
+   "focus": 305,
+   "summary": "en runCommand",
+   "text": "def runCommand (s : Command) : M IO (CommandResponse ⊕ Error) := do\n  let (cmdSnapshot?, notFound) ← do match s.env with\n  | none => pure (none, false)\n  | some i => do match (← get).cmdStates[i]? with\n    | some env => pure (some env, false)\n    | none => pure (none, true)\n  if notFound then\n    return .inr ⟨\"Unknown environment.\"⟩\n  let initialCmdState? := cmdSnapshot?.map fun c => c.cmdState\n  let (initialCmdState, cmdState, messages, trees) ← try\n    IO.processInput s.cmd initialCmdState?\n  catch ex =>\n    return .inr ⟨ex.toString⟩\n  let messages ← messages.mapM fun m => Message.of m\n  -- For debugging purposes, sometimes we print out the trees here:",
+   "tint": 1
+  },
+  {
+   "id": "r5",
+   "repo": "repl",
+   "path": "REPL/JSON.lean",
+   "first": 23,
+   "last": 30,
+   "focus": 29,
+   "summary": "en Command",
+   "text": "/-- Run Lean commands.\nIf `env = none`, starts a new session (in which you can use `import`).\nIf `env = some n`, builds on the existing environment `n`.\n-/\nstructure Command extends CommandOptions where\n  env : Option Nat\n  cmd : String\nderiving ToJson, FromJson",
+   "tint": 1
+  }
+ ],
+ "lean-inside": [
+  {
+   "id": "r1",
+   "repo": "lean4",
+   "path": "src/kernel/environment.cpp",
+   "first": 191,
+   "last": 208,
+   "focus": 204,
+   "summary": "en environment::add_theorem",
+   "text": "environment environment::add_theorem(declaration const & d, bool check) const {\n    scoped_diagnostics diag(*this, check);\n    theorem_val const & v = d.to_theorem_val();\n    if (check) {\n        type_checker checker(*this, diag.get());\n        sharecommon_persistent_fn share;\n        expr val(share(v.get_value().raw()));\n        expr type(share(v.get_type().raw()));\n        check_constant_val(*this, v.to_constant_val(), checker);\n        if (!checker.is_prop(type))\n            throw theorem_type_is_not_prop(*this, v.get_name(), type);\n        check_no_metavar_no_fvar(*this, v.get_name(), val);\n        expr val_type = checker.check(val, v.get_lparams());\n        if (!checker.is_def_eq(val_type, type))\n            throw definition_type_mismatch_exception(*this, d, val_type);\n    }\n    return diag.update(add(constant_info(d)));\n}",
+   "tint": 0
+  },
+  {
+   "id": "r2",
+   "repo": "lean4",
+   "path": "src/kernel/type_checker.cpp",
+   "first": 173,
+   "last": 187,
+   "focus": 185,
+   "summary": "en type_checker::infer_app",
+   "text": "expr type_checker::infer_app(expr const & e, bool infer_only) {\n    if (!infer_only) {\n        expr f_type = ensure_pi_core(infer_type_core(app_fn(e), infer_only), e);\n        expr a_type = infer_type_core(app_arg(e), infer_only);\n        expr d_type = binding_domain(f_type);\n        if (is_eager_reduce(app_arg(e))) {\n            // If argument is of the form `eagerReduce`, set m_eager_reduction mode\n            flet<bool> scope(m_eager_reduce, true);\n            if (!is_def_eq(a_type, d_type)) {\n                throw app_type_mismatch_exception(env(), m_lctx, e, f_type, a_type);\n            }\n        } else if (!is_def_eq(a_type, d_type)) {\n            throw app_type_mismatch_exception(env(), m_lctx, e, f_type, a_type);\n        }\n        return instantiate(binding_body(f_type), app_arg(e));",
+   "tint": 0
+  }
  ]
 }

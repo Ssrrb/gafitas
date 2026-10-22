@@ -8,6 +8,7 @@ import "./styles/theme.css";
 import "./styles/page.css";
 import "./styles/puzzle.css";
 import "./styles/choices.css";
+import "./styles/proof.css";
 import { whenDrawn } from "./store";
 
 installBridge();

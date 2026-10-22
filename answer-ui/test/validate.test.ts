@@ -35,10 +35,15 @@ describe("validate", () => {
     expect(validateProgram(fixture("requests-urllib3"), refsFor("requests-urllib3"), { quiz: true })).toContainEqual({ id: "root", soft: true, message: expect.stringContaining("Ponme a prueba") });
   });
 
-  it("draws one picture or choice, Next last, and Checks only in a quiz", () => {
+  it("draws one picture and one choice, Next last, and Checks only in a quiz", () => {
     const blocks = (text: string, quiz = false) => drawnBlocks((parseProgram(text).root?.props.blocks as unknown[]) ?? [], quiz).map((b) => b.type);
     expect(blocks(fixture("live-https"))).toEqual(["Puzzle", "Callout"]);
-    expect(blocks(fixture("live-ways"))).toEqual(["Ways", "Next"]);
+    expect(blocks(fixture("live-ways"))).toEqual(["Puzzle", "Ways", "Next"]);
+    expect(blocks(fixture("lean-integrate"))).toEqual(["Proof", "Ways", "Next"]);
+    // Two drawings at most: a picture and a Proof leave the choice out; a second Proof goes.
+    const three = fixture("lean-integrate").replace("[k1, w0, n1]", "[w0, k1, z1, n1]") + '\nz1 = Puzzle("x", [p1, p2], [j1], [s1])\np1 = Idea("a")\np2 = Idea("b")\nj1 = Joint(p1, p2, "c")\ns1 = Step(p1, "d")';
+    expect(blocks(three)).toEqual(["Puzzle", "Proof", "Next"]);
+    expect(blocks(fixture("lean-integrate").replace("[k1, w0, n1]", "[k1, k1, n1]"))).toEqual(["Proof", "Next"]);
     expect(blocks(fixture("quiz-urllib3"))).toEqual([]);
     expect(blocks(fixture("quiz-urllib3"), true)).toEqual(["Check", "Check", "Check"]);
     const snippetAlone = 'root = Answer("La llamada.", [t1, n1])\nt1 = Snippet("r2:696-700")\nn1 = Next(["¿Y luego?", "¿Quién la recibe?"])';

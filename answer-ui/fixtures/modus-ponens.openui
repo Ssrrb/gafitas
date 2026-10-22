@@ -1,0 +1,6 @@
+root = Answer("Con A y «A implica B» tienes B; quita una y B no se sigue.", [k1, n1])
+f1 = Fact("A")
+f2 = Fact("A implica B")
+g1 = Rule("B", "modus ponens", [f1, f2])
+k1 = Proof("Una regla en acción", g1)
+n1 = Next(["¿Cómo se encadenan las reglas?", "¿Qué es una prueba en Lean?"])

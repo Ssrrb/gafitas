@@ -6,6 +6,7 @@ import { createParser, mergeStatements, type ElementNode } from "@openuidev/lang
 import { BLOCKS, library, ROOT } from "./library";
 import { sureOf } from "./components/Learn";
 import { readPuzzle } from "./puzzle/model";
+import { readProof } from "./proof/model";
 import { columnOf, effortOf } from "./components/Choices";
 import { resolveRef, type RefTable } from "./refs";
 
@@ -88,6 +89,9 @@ const PROSE: Record<string, string[]> = {
   Board: ["title"],
   Item: ["title", "note"],
   Puzzle: ["title", "caption"],
+  Proof: ["title"],
+  Rule: ["claim"],
+  Fact: ["claim"],
   NewPiece: ["note"],
   Idea: ["note"],
   Step: ["text"],
@@ -205,7 +209,7 @@ export function validateProgram(text: string, refs: RefTable, opts: { quiz?: boo
   const lede = typeof root.props.lede === "string" ? root.props.lede : "";
   if (wordCount(lede) > WORDS.lede) addSoft("root", `The lede has ${wordCount(lede)} words; answer in one line of at most 12.`);
   const prose = measure(text);
-  if (prose.words > WORDS.answer) addSoft("root", `The answer has ${prose.words} words for the user to read; keep it under ${WORDS.answer}: one block, short steps and notes, each fact once.`);
+  if (prose.words > WORDS.answer) addSoft("root", `The answer has ${prose.words} words for the user to read; keep it under ${WORDS.answer}: one picture, short labels, each fact once.`);
   for (const { id, text: t } of prose.strings) {
     const code = retyped(t);
     if (code) addSoft(id, `${id} retypes code ("${code.slice(0, 40)}"); cite its ref instead, so Gafitas shows the real lines.`);
@@ -228,6 +232,9 @@ export function validateProgram(text: string, refs: RefTable, opts: { quiz?: boo
         }
         break;
       }
+      case "Proof":
+        for (const problem of readProof(node, refs).problems) add(problem.id, problem.message);
+        break;
       case "Snippet":
         refCheck(id, "Snippet", p.ref);
         break;
@@ -385,7 +392,7 @@ export function pruneBroken(text: string, errors: AnswerError[]): string {
   const kind = new Map(statements.map((s) => [s.id, /^\s*([A-Za-z_$][\w$]*)\s*\(/.exec(s.rhs)?.[1] ?? ""]));
   const uses = new Map(statements.map((s) => [s.id, [...words(s.rhs)].filter((w) => byId.has(w) && w !== s.id)]));
   // What a container needs left in each of its lists to stay: a Puzzle 2 pieces and a joint, a choice 2 entries.
-  const keeps: Record<string, number[]> = { Answer: [], Puzzle: [2, 1], Ways: [2], Pick: [2], Board: [2], Walkthrough: [2], Matches: [2] };
+  const keeps: Record<string, number[]> = { Answer: [], Puzzle: [2, 1], Rule: [1], Ways: [2], Pick: [2], Board: [2], Walkthrough: [2], Matches: [2] };
   const containers = new Set(Object.keys(keeps));
   const drop = new Set<string>();
   const dropLines = new Set<number>();

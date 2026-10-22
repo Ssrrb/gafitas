@@ -8,6 +8,7 @@ import { z } from "zod/v4";
 import { CalloutBlock, CheckBlock, Inline, QuizContext, SnippetBlock, TextBlock } from "./components/blocks";
 import { MatchesBlock, SideBySideBlock, WalkthroughBlock, type SideProps } from "./components/Learn";
 import { PuzzleBlock } from "./components/Puzzle";
+import { ProofBlock } from "./components/Proof";
 import { BoardBlock, NextBlock, PickBlock, WaysBlock } from "./components/Choices";
 import { ICON_NAMES } from "./icons";
 import { TurnContext } from "./store";
@@ -65,6 +66,27 @@ export const Puzzle = defineComponent({
     caption: z.string().optional(),
   }),
   component: ({ props, statementId }) => <PuzzleBlock props={props as Record<string, unknown>} statementId={statementId} />,
+});
+
+export const Fact = defineComponent({
+  name: "Fact",
+  description: "A premise. claim: a fact, at most 8 words; `code` names allowed. ref: the lines that check it and refuse when it is false.",
+  props: z.object({ claim: z.string(), ref: z.string().optional() }),
+  component: nothing,
+});
+
+export const Rule = defineComponent({
+  name: "Rule",
+  description: "A check that concludes claim from given (1 to 3 Facts or Rules). claim: at most 8 words. name: as the code names it (\"add_theorem\") or the rule's name (\"modus ponens\"). ref: the lines that check it and refuse when it is false.",
+  props: z.object({ claim: z.string(), name: z.string(), given: z.array(z.union([Fact.ref, z.lazy((): z.core.$ZodType => Rule.ref)])), ref: z.string().optional() }),
+  component: nothing,
+});
+
+export const Proof = defineComponent({
+  name: "Proof",
+  description: "Why something holds or can't go wrong: the goal Rule at the bottom, what it needs above it. title: at most 7 words.",
+  props: z.object({ title: z.string(), goal: Rule.ref }),
+  component: ({ props, statementId }) => <ProofBlock props={props as Record<string, unknown>} statementId={statementId} />,
 });
 
 export const Way = defineComponent({
@@ -197,25 +219,25 @@ export const Text = defineComponent({
   component: ({ props }) => <TextBlock md={props.md} />,
 });
 
-export const LIMITS = { Ways: 1, Pick: 1, Board: 1, Puzzle: 1, Matches: 1, Walkthrough: 1, SideBySide: 1, Snippet: 1, Text: 1, Callout: 1, Check: 3, Next: 1 } as const;
-export const BLOCKS = ["Ways", "Pick", "Board", "Puzzle", "Matches", "Walkthrough", "SideBySide", "Snippet", "Callout", "Compare", "Check", "Text", "Next"] as const;
-/** The drawings: one an answer, so it stays one idea; the next one is a click away. */
-export const BIG_BLOCKS = ["Ways", "Pick", "Board", "Puzzle", "Matches", "Walkthrough", "SideBySide"] as const;
-export const MAX_BIG = 1;
+export const LIMITS = { Ways: 1, Pick: 1, Board: 1, Puzzle: 1, Proof: 1, Matches: 1, Walkthrough: 1, SideBySide: 1, Snippet: 1, Text: 1, Callout: 1, Check: 3, Next: 1 } as const;
+export const BLOCKS = ["Ways", "Pick", "Board", "Puzzle", "Proof", "Matches", "Walkthrough", "SideBySide", "Snippet", "Callout", "Compare", "Check", "Text", "Next"] as const;
 /** At most one of these per answer: the block the reader answers by picking. */
 export const CHOICE_BLOCKS = ["Ways", "Pick", "Board"] as const;
-/** The pictures of real code: next to one, a Snippet or a Text only repeats it. */
-export const PICTURES = ["Puzzle", "Matches", "Walkthrough", "SideBySide", "Compare"] as const;
-/** Where a block goes, whatever order the model wrote: the choice or the picture, then a Callout, the Checks, and the
- * next questions last. Fixed from the root line, so nothing jumps while it streams. */
-const RANK: Record<string, number> = { Ways: 0, Pick: 0, Board: 0, Puzzle: 1, Matches: 1, Walkthrough: 2, SideBySide: 3, Snippet: 3, Compare: 3, Callout: 4, Text: 4, Check: 5, Next: 6 };
+/** Pictures of real code: next to one, a Snippet or a Text only repeats it. At most one besides a Proof. */
+export const PICTURES = ["Puzzle", "Proof", "Matches", "Walkthrough", "SideBySide", "Compare"] as const;
+/** Two drawings at most: what to see (a picture), why it holds (a Proof) or what to decide (a choice). */
+export const BIG_BLOCKS = ["Ways", "Pick", "Board", "Puzzle", "Proof", "Matches", "Walkthrough", "SideBySide"] as const;
+export const MAX_BIG = 2;
+/** Where a block goes, whatever order the model wrote: the picture, the Proof, the choice, then a Callout, the Checks,
+ * and the next questions last. Fixed from the root line, so nothing jumps while it streams. */
+const RANK: Record<string, number> = { Puzzle: 1, Matches: 1, Walkthrough: 2, SideBySide: 3, Snippet: 3, Compare: 3, Proof: 4, Ways: 5, Pick: 5, Board: 5, Callout: 6, Text: 6, Check: 7, Next: 8 };
 export const ICON_LIST = ICON_NAMES.join(", ");
 
 const typeOf = (block: unknown) => (block as { typeName?: string } | null)?.typeName ?? "";
 const has = (list: readonly string[], type: string) => list.includes(type);
 
-/** The blocks an answer draws, in order: what the model wrote, cut to one picture or choice, a Callout, the Checks of a
- * quiz, and Next last. Text and Snippet go when there is a picture; a Check only answers «Ponme a prueba». */
+/** The blocks an answer draws, in order: what the model wrote, cut to two of one picture, one Proof and one choice, a
+ * Callout, the Checks of a quiz, and Next last. Text and Snippet go when there is a picture; a Check only answers «Ponme a prueba». */
 export function drawnBlocks(blocks: unknown[], quiz: boolean) {
   const ordered = blocks
     .map((block, i) => ({ block, i, type: typeOf(block), rank: RANK[typeOf(block)] ?? 4 }))
@@ -224,18 +246,21 @@ export function drawnBlocks(blocks: unknown[], quiz: boolean) {
   const picture = ordered.some(({ type }) => has(PICTURES, type));
   const seen: Record<string, number> = {};
   let choice = false;
+  let drawn = false;
   let big = 0;
   return ordered.filter(({ type }) => {
     if (picture && (type === "Text" || type === "Snippet")) return false;
     if (type === "Check" && !quiz) return false;
+    if (has(BIG_BLOCKS, type) && big >= MAX_BIG) return false;
     if (has(CHOICE_BLOCKS, type)) {
       if (choice) return false;
       choice = true;
     }
-    if (has(BIG_BLOCKS, type)) {
-      if (big >= MAX_BIG) return false;
-      big += 1;
+    if (has(PICTURES, type) && type !== "Proof") {
+      if (drawn) return false;
+      drawn = true;
     }
+    if (has(BIG_BLOCKS, type)) big += 1;
     seen[type] = (seen[type] ?? 0) + 1;
     const limit = LIMITS[type as keyof typeof LIMITS];
     return !limit || seen[type]! <= limit;
@@ -278,15 +303,15 @@ function AnswerView({ lede, blocks }: { lede: string; blocks: unknown[] }) {
 
 export const Answer = defineComponent({
   name: "Answer",
-  description: "The answer. lede: one line that answers, at most 12 words. blocks: one picture or choice, then Next.",
+  description: "The answer. lede: one line that answers, at most 12 words. blocks: one picture; a Proof or one choice beside it only when needed; then Next.",
   props: z.object({
     lede: z.string(),
-    blocks: z.array(z.union([Ways.ref, Pick.ref, Board.ref, Puzzle.ref, Matches.ref, Walkthrough.ref, SideBySide.ref, Snippet.ref, Callout.ref, Compare.ref, Check.ref, Text.ref, Next.ref])),
+    blocks: z.array(z.union([Puzzle.ref, Proof.ref, Ways.ref, Pick.ref, Board.ref, Matches.ref, Walkthrough.ref, SideBySide.ref, Snippet.ref, Callout.ref, Compare.ref, Check.ref, Text.ref, Next.ref])),
   }),
   component: ({ props }) => <AnswerView lede={props.lede} blocks={Array.isArray(props.blocks) ? props.blocks : []} />,
 });
 
 export const library = createLibrary({
   root: ROOT,
-  components: [Answer, Ways, Way, Pick, Option, Board, Item, Puzzle, Piece, NewPiece, Idea, Joint, Step, Matches, Match, Walkthrough, Lines, SideBySide, Side, Snippet, Callout, Compare, Check, Text, Next],
+  components: [Answer, Puzzle, Piece, NewPiece, Idea, Joint, Step, Proof, Rule, Fact, Ways, Way, Pick, Option, Board, Item, Matches, Match, Walkthrough, Lines, SideBySide, Side, Snippet, Callout, Compare, Check, Text, Next],
 });

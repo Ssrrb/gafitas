@@ -76,6 +76,31 @@
   --g-p4-pale: color-mix(in srgb, var(--g-p4) var(--g-pale), var(--g-sheet));
   /* One release: the old name for "lit". */
   --g-amber: var(--g-lit);
+  /* A refusal's ground, and a bar not yet checked. */
+  --g-negative-fill: color-mix(in srgb, var(--g-negative) 10%, var(--g-sheet));
+  --g-rest-bar: color-mix(in srgb, var(--g-text) 30%, var(--g-sheet));
+  /* Motion: settle, travel, leave. */
+  --g-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --g-ease-move: cubic-bezier(0.76, 0, 0.24, 1);
+  --g-ease-exit: cubic-bezier(0.55, 0.055, 0.675, 0.19);
+}
+
+:root[data-theme="dark"] {
+  --g-negative-fill: color-mix(in srgb, var(--g-negative) 16%, var(--g-sheet));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --g-negative-fill: color-mix(in srgb, var(--g-negative) 16%, var(--g-sheet));
+  }
+}
+
+/* ?still=1 and screenshots: every block in its final state, nothing in between. */
+:root[data-still] *,
+:root[data-still] *::before,
+:root[data-still] *::after {
+  transition: none !important;
+  animation: none !important;
 }
 
 @media (prefers-contrast: more) {

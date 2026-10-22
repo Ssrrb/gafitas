@@ -26,6 +26,10 @@ const QUESTIONS: Record<string, string> = {
   "broken-choices": "¿Dónde pongo los reintentos?",
   "inside-adapter": "¿Cómo funciona «HTTPAdapter.send» por dentro?",
   "quiz-urllib3": "Ponme a prueba.",
+  "lean-integrate": "¿Cómo integro Lean en mi código?",
+  "pi-lean-tool": "Quiero seguir por «Una herramienta con el REPL».",
+  "modus-ponens": "¿Qué es una regla de inferencia?",
+  "lean-inside": "¿Qué revisa add_theorem?",
   "live-https": "¿Y cómo lo monto solo para https?",
   "live-ways": "¿Cómo hago que requests reintente con espera si falla la conexión?",
 };

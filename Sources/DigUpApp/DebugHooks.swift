@@ -24,7 +24,7 @@ import SwiftUI
 ///                             -debugAskAnswer YES to ask for the answer and wait for it, -debugAskChat ID to reopen a
 ///                             saved chat instead, -debugAskFollowUp "…" to ask that next in the same chat,
 ///                             -debugAskOpen YES to click the first piece (-debugDryOpen YES: only log where it opens),
-///                             -debugWindowSize "{980,620}"; -debugApproveProviders YES skips the privacy sheet; the
+///                             -debugWindowSize 980x620; -debugApproveProviders YES skips the privacy sheet; the
 ///                             whole answer page also goes to <snapshot>-answer.png)
 ///                             (-debugCloseWindow YES closes it afterwards, to measure what closing gives back;
 ///                             -debugWindowAfter S opens it S seconds after launch, once the helper has reported)

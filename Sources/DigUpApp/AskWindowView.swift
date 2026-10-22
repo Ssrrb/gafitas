@@ -248,7 +248,8 @@ private struct HistoryRow: View {
 
     private var meta: String {
         if live { return "Respondiendo…" }
-        var parts = [When.short(row.updated)]
+        // When it was asked, as the top bar says it; the list is in order of the latest question.
+        var parts = [When.short(row.created)]
         if row.questions > 1 { parts.append("\(row.questions) preguntas") }
         if row.failed { parts.append("Se cortó") }
         return parts.joined(separator: " · ")

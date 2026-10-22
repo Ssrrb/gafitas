@@ -52,11 +52,12 @@ final class AskWindowController: NSObject, NSWindowDelegate {
         if UserDefaults.standard.string(forKey: "defaultsSuite") == nil {
             window.setFrameAutosaveName("GafitasAskWindow")
         }
-        // For snapshots at the smallest size: -debugWindowSize "{980,620}".
-        if let size = UserDefaults.standard.string(forKey: "debugWindowSize").map(NSSizeFromString), size.width > 0 {
-            window.setContentSize(size)
-        }
         window.contentView = NSHostingView(rootView: AskWindowView(ask: ask, model: app.model, app: app))
+        // For snapshots at the smallest size: -debugWindowSize 980x620 (after the content, which sizes the window).
+        if let size = UserDefaults.standard.string(forKey: "debugWindowSize")?.split(separator: "x").compactMap({ Double($0) }),
+           size.count == 2 {
+            window.setContentSize(NSSize(width: size[0], height: size[1]))
+        }
         if window.frame.origin == .zero { window.center() }
         self.window = window
         return window

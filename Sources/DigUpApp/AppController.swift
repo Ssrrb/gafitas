@@ -209,6 +209,15 @@ final class AppController {
 
     // MARK: Windows
 
+    /// A saved chat from the history (the menu bar's Recientes), drawn from its log.
+    func openChat(_ id: String) {
+        askWindow.show()
+        askWindow.ask.open(chat: id)
+    }
+
+    /// Where every chat is kept.
+    var chatLog: ChatLog { ChatLog(index: model.settings.indexDirectory) }
+
     func showAsk(question: String? = nil) {
         askWindow.show(question: question)
     }

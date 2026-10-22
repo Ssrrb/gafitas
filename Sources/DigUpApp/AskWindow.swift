@@ -311,6 +311,9 @@ final class AskModel {
         return row.name
     }
 
+    /// A saved chat, drawn from the history log.
+    func open(chat id: String) {}
+
     func loadProjects() {
         Task {
             let summaries = await engine.rootSummaries(code: true)

@@ -220,14 +220,12 @@ final class AgentRunner {
     /// The program starts at its `root =` line (corrected statements, at their first); a code fence around it is
     /// dropped.
     private func emitProgram() {
-        var program: String
-        if raw {
-            guard let start = message.firstRange(of: /[A-Za-z_][A-Za-z0-9_]* *=/) else { return }
-            program = String(message[start.lowerBound...])
-        } else {
-            guard let start = message.range(of: "root =") ?? message.range(of: "root=") else { return }
-            program = String(message[start.lowerBound...])
-        }
+        // A statement starts a line: "root =" inside a model's thinking aloud ("Final: root first line.root = …")
+        // isn't the program yet.
+        let first = raw ? message.firstRange(of: /(?m)^[A-Za-z_][A-Za-z0-9_]* *=/)
+                        : message.firstRange(of: /(?m)^root *=/)
+        guard let first else { return }
+        var program = String(message[first.lowerBound...])
         if let fence = program.range(of: "\n```") { program = String(program[..<fence.lowerBound]) }
         guard program.count > sent else { return }
         onEvent(.program(String(program.dropFirst(sent))))

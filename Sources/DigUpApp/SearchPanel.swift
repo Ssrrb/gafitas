@@ -328,7 +328,13 @@ final class SearchPanelController {
             navigated = true
             return true
         case 36, 76:  // ↩, enter
-            if selection == Self.weakerToggle, modifiers.isEmpty {
+            let typed = query.trimmingCharacters(in: .whitespaces)
+            if modifiers.isEmpty, typed.lowercased().hasPrefix("ask:") {
+                // "ask: how do I…": the Ask window, digging up and answering at once.
+                hide()
+                app.showAsk(question: String(typed.dropFirst(4)).trimmingCharacters(in: .whitespaces))
+                app.askWindow.ask.askNow()
+            } else if selection == Self.weakerToggle, modifiers.isEmpty {
                 toggleWeaker()
             } else if modifiers == .command {
                 revealSelected()

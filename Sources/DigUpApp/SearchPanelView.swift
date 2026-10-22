@@ -544,6 +544,10 @@ private struct CodeHint: View {
                     }
                 }
                 .padding(.top, 6)
+                Text("To have it explained with a figure, start with ask: and press Return.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
             }
         }
         .font(.system(size: 13))

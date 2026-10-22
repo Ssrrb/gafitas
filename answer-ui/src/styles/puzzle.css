@@ -255,8 +255,8 @@ button.g-tile {
   position: absolute;
   display: flex;
   color: var(--g-text);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 17px;
   font-weight: 500;
 }
 

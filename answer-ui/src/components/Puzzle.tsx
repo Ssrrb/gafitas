@@ -12,6 +12,13 @@ import { TurnContext, useRefs, useSelected } from "../store";
 import { adaptAria, alsoJoint, linesAria, linesShort, puzzleAria, S, stepOf, stepsCount } from "../strings";
 import { Inline } from "./blocks";
 
+/** Cut a line to what fits the tile (12px text: about 7.2px a character in SF Mono, 6.4 in SF), so nothing runs
+ * past its tile even unclipped. */
+const fit = (text: string, width: number, perChar: number) => {
+  const max = Math.max(4, Math.floor(width / perChar));
+  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
+};
+
 /** Turns whose figure already played its entrance: a repair remount or a reflow never replays it. */
 const entered = new Set<string>();
 
@@ -239,8 +246,8 @@ function Puzzle({ model }: { model: PuzzleModel }) {
                       <code className="g-tile-name">
                         <CodeName name={piece.name} />
                       </code>
-                      <span className="g-tile-meta">{[ref ? linesShort(basename(ref.entry.path), ref.from, ref.to) : "", piece.kind].filter(Boolean).join(" · ")}</span>
-                      {piece.code ? <code className="g-tile-code">{piece.code}</code> : null}
+                      <span className="g-tile-meta">{fit([ref ? linesShort(basename(ref.entry.path), ref.from, ref.to) : "", piece.kind].filter(Boolean).join(" · "), tile.w - 28, 6.4)}</span>
+                      {piece.code ? <code className="g-tile-code">{fit(piece.code, tile.w - 28, 7.3)}</code> : null}
                     </button>
                   ) : piece.type === "NewPiece" ? (
                     <div className="g-tile" data-type="new" {...events}>

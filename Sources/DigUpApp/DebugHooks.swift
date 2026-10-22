@@ -18,7 +18,8 @@ import SwiftUI
 ///     -debugHotkeyCheck a,b   log what the shortcut recorder would say about each combination ("cmd+space"…)
 ///     -debugDialogs <png>     draw the privacy sheet, the delete-chat alert and the delete-history alert into
 ///                             <png>-privacy.png, -delete.png, -history.png (with -debugAskChat ID, the sheet counts
-///                             that chat's places)
+///                             that chat's places; without -debugOffscreen the alerts show for a moment, so the
+///                             window server draws their glass)
 ///     -debugMenuView <png>    draw the top of the menu (status, detail, progress) into <png>, after
 ///                             -debugMenuViewAfter seconds
 ///     -debugWindow PAGE       open a window and snapshot it:
@@ -404,9 +405,21 @@ enum DebugHooks {
         let window = NSWindow(contentRect: sheet.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = sheet
         save("privacy sheet", { try Snapshot.write(window, to: $0) }, to: URL(fileURLWithPath: base + "-privacy.png"))
-        for (name, alert) in [("delete", AskModel.deleteAlert(questions: 2)), ("history", SettingsState.historyAlert())] {
+        let alerts = [("delete", AskModel.deleteAlert(questions: 2)), ("history", SettingsState.historyAlert())]
+        for (name, alert) in alerts {
             alert.layout()
-            save("\(name) alert", { try Snapshot.write(alert.window, to: $0) }, to: URL(fileURLWithPath: base + "-\(name).png"))
+            let file = URL(fileURLWithPath: base + "-\(name).png")
+            if AppController.offscreen {
+                save("\(name) alert", { try Snapshot.write(alert.window, to: $0) }, to: file)
+                continue
+            }
+            // cacheDisplay draws an alert's glass as blank white in dark mode: shown for a moment (the app isn't
+            // activated), the window server draws it as it really looks.
+            alert.window.center()
+            alert.window.orderFrontRegardless()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+            save("\(name) alert", { try Snapshot.capture(alert.window, to: $0) }, to: file)
+            alert.window.orderOut(nil)
         }
     }
 

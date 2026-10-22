@@ -194,6 +194,11 @@ button.g-tile {
   cursor: pointer;
 }
 
+/* The rows keep their height: a tile is a fixed size, and what doesn't fit is cut, never squeezed. */
+.g-tile > * {
+  flex: none;
+}
+
 .g-tile-name {
   display: -webkit-box;
   overflow: hidden;
@@ -231,7 +236,11 @@ button.g-tile {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 2px;
+  height: 18px;
+}
+
+.g-tile-note[data-one] {
+  -webkit-line-clamp: 1;
 }
 
 .g-tile-note {

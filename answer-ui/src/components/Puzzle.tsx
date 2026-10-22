@@ -254,11 +254,10 @@ function Puzzle({ model }: { model: PuzzleModel }) {
                       <code className="g-tile-name">
                         <CodeName name={piece.name} />
                       </code>
-                      <span className="g-tile-meta">
-                        {basename(piece.path)} · {S.isNew}
-                      </span>
                       <span className="g-tile-new">
-                        {piece.note ? <span className="g-tile-note">{piece.note}</span> : <span />}
+                        <span className="g-tile-meta">
+                          {basename(piece.path)} · {S.isNew}
+                        </span>
                         <button
                           type="button"
                           className="g-button g-adapt"
@@ -268,6 +267,11 @@ function Puzzle({ model }: { model: PuzzleModel }) {
                           {S.adapt}
                         </button>
                       </span>
+                      {piece.note ? (
+                        <span className="g-tile-note" data-one="" title={piece.note}>
+                          {piece.note}
+                        </span>
+                      ) : null}
                     </div>
                   ) : (
                     <div className="g-tile" data-type="idea">

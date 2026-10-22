@@ -745,6 +745,7 @@ private struct CodeSettings: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+            AnswerSettings(state: state)
             Section {
                 Text("The code index keeps your code's text on this Mac, as the main index keeps your documents'. "
                      + "It skips what git ignores, vendored and generated code, data files, and anything that looks "
@@ -781,6 +782,68 @@ private struct CodeSettings: View {
         } message: {
             Text("Its \(removing?.files.formatted() ?? "") code files leave the code index.")
         }
+    }
+}
+
+/// Answers in the Ask window: who writes them (Pi, with its model), what goes to that model, and Pi in the terminal.
+private struct AnswerSettings: View {
+    let state: SettingsState
+    @State private var pi = AgentRunner.locate()
+    @State private var installed = FileManager.default.fileExists(atPath: AnswerSettings.terminalExtension.path)
+
+    static let terminalExtension = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/extensions/gafitas.ts")
+
+    var body: some View {
+        Section {
+            LabeledContent("Answers by") {
+                if let pi {
+                    Text("Pi, at \(tildePath(pi.path))").foregroundStyle(.secondary)
+                } else {
+                    Button("Copy Install Command") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(AnswerSheet.installCommand, forType: .string)
+                    }
+                }
+            }
+            if pi != nil {
+                Toggle(isOn: Binding(get: { installed }, set: { setTerminal($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Look for existing code from Pi in the terminal")
+                        Text("Adds dig to Pi everywhere, and Pi writes no file before it has looked.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("Answers")
+        } footer: {
+            Text("Pi writes answers with the model it's set up with. Your question and the places Gafitas found go to "
+                 + "that model, and Gafitas asks before the first time one isn't on this Mac. With a local model, "
+                 + "nothing leaves.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// The extension for Pi everywhere, pointed at this copy of Gafitas's helper and index.
+    private func setTerminal(_ on: Bool) {
+        let file = Self.terminalExtension
+        if on {
+            guard let source = Bundle.main.url(forResource: "gafitas", withExtension: "ts", subdirectory: "pi"),
+                  var text = try? String(contentsOf: source, encoding: .utf8) else { return }
+            let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/digup").path
+            text = text.replacingOccurrences(of: "\"/Applications/Gafitas.app/Contents/Helpers/digup\"",
+                                             with: "\"\(helper)\"")
+                .replacingOccurrences(of: "`${support}/index.noindex`",
+                                      with: "\"\(state.model.settings.indexDirectory.path)\"")
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? text.write(to: file, atomically: true, encoding: .utf8)
+        } else {
+            try? FileManager.default.removeItem(at: file)
+        }
+        installed = FileManager.default.fileExists(atPath: file.path)
     }
 }
 

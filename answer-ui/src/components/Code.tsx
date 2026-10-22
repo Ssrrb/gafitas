@@ -14,6 +14,8 @@ export function CodeLines({
   onLine,
   after,
   style,
+  echo,
+  onHoverText,
 }: {
   entry: RefEntry;
   rows: CodeRow[];
@@ -25,6 +27,10 @@ export function CodeLines({
   /** A row under line n. */
   after?: (n: number) => React.ReactNode;
   style?: React.CSSProperties;
+  /** Lines to mark as echoing what's hovered elsewhere (SideBySide). */
+  echo?: (text: string) => boolean;
+  /** The text of the line under the pointer, or null when it leaves. */
+  onHoverText?: (text: string | null) => void;
 }) {
   const [open, setOpen] = React.useState<ReadonlySet<number>>(() => new Set());
   const raw = React.useMemo(() => new Map(linesOf(entry).map((line) => [line.n, line.text])), [entry]);
@@ -41,6 +47,7 @@ export function CodeLines({
   );
   const last = Math.max(0, ...shown.map((row) => (row.kind === "line" ? row.n : row.to)));
   const asRef: ResolvedRef = { entry, from: entry.first, to: entry.last, line: entry.first, single: false };
+  let lit = 0;
   return (
     <pre className={["g-code", className].filter(Boolean).join(" ")} style={{ "--g-gutter": badges?.size ? `calc(${String(last).length + 1}ch + 22px)` : `${String(last).length + 1}ch`, ...style } as React.CSSProperties}>
       <code>
@@ -60,12 +67,20 @@ export function CodeLines({
               <span
                 className="g-line"
                 data-focus={row.lit ? "" : undefined}
+                style={row.lit ? ({ "--k": Math.min(lit++, 3) } as React.CSSProperties) : undefined}
                 data-comment={row.comment ? "" : undefined}
+                data-echo={echo?.(row.text) ? "" : undefined}
                 onClick={() => {
                   if (!onLine?.(row.n)) openRef(asRef, row.n);
                 }}
-                onPointerEnter={() => hoverRef(asRef)}
-                onPointerLeave={() => hoverRef(null)}
+                onPointerEnter={() => {
+                  hoverRef(asRef);
+                  onHoverText?.(row.text);
+                }}
+                onPointerLeave={() => {
+                  hoverRef(null);
+                  onHoverText?.(null);
+                }}
               >
                 <span className="g-ln" aria-hidden="true">
                   {badge ? (

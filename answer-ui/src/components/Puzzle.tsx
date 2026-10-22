@@ -4,8 +4,10 @@
 import * as React from "react";
 import type { ElementNode } from "@openuidev/lang-core";
 import { useTriggerAction } from "@openuidev/react-lang";
+import { Pause, Play } from "lucide-react";
+import { whenSeen } from "../autoplay";
 import { post } from "../post";
-import { DEFAULT_WIDTH, layout, type Layout } from "../puzzle/layout";
+import { DEFAULT_WIDTH, K, layout, type Layout } from "../puzzle/layout";
 import { basename, readPuzzle, type PuzzleModel, type PuzzlePiece } from "../puzzle/model";
 import { KNOB_HALF, knobPath, knobSegment, tilePath } from "../puzzle/path";
 import { isStill } from "../still";
@@ -34,6 +36,10 @@ function Called({ text, call }: { text: string; call: string }) {
 
 /** Turns whose figure already played its entrance: a repair remount or a reflow never replays it. */
 const entered = new Set<string>();
+
+/** How long play stays on a step: a hand-off travels then holds; a piece holds. */
+const dwell = (step: { lit: unknown } | undefined) => (step?.lit && typeof step.lit === "object" && "joint" in step.lit ? 1600 : 1400);
+const TRAVEL = 900;
 
 /** Break a code name before each "." and after each "_", so it wraps where a reader would. */
 function CodeName({ name }: { name: string }) {
@@ -93,6 +99,10 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
   const width = useWidth(stage);
   const [step, setStep] = React.useState(0);
   const [hover, setHover] = React.useState<number | null>(null);
+  const [playing, setPlaying] = React.useState(false);
+  const token = React.useRef<HTMLSpanElement>(null);
+  const card = React.useRef<HTMLDivElement>(null);
+  const touched = React.useRef(false);
   const [enter, setEnter] = React.useState(() => !turn.replay && !isStill() && !entered.has(turn.key));
   React.useEffect(() => {
     if (turn.key) entered.add(turn.key);
@@ -119,14 +129,76 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
   const lit = chosen >= 0 ? { piece: chosen } : current >= 0 ? steps[current]!.lit : null;
   const litPiece = lit && "piece" in lit ? lit.piece : -1;
   const litJoint = lit && "joint" in lit ? lit.joint : -1;
+  // What crosses a hand-off travels it: from the giver's hand-off line, through the knob, to the receiver's name.
+  React.useEffect(() => {
+    const el = token.current;
+    if (!playing || litJoint < 0 || !el || isStill() || typeof el.animate !== "function") return;
+    const seam = L.seams.find((s) => s.joint === litJoint);
+    const joint = joints[litJoint];
+    if (!seam || !joint) return;
+    const give = L.tiles[joint.from]!;
+    const take = L.tiles[joint.to]!;
+    const row = Math.max(0, pieces[joint.from]!.rows.findIndex((r) => r.main));
+    const w = el.offsetWidth;
+    const a = { x: give.x + 14, y: give.y + K.SOCKET + L.lines * K.LINE + K.LINE + row * K.ROW };
+    const b = { x: seam.x - w / 2, y: seam.y - 11 };
+    const c = { x: take.x + 14, y: take.y + K.SOCKET - 24 };
+    const at = (p: { x: number; y: number }, q: { x: number; y: number }, t: number) => `translate(${p.x + (q.x - p.x) * t}px, ${p.y + (q.y - p.y) * t}px)`;
+    const animation = el.animate(
+      [
+        { transform: at(a, b, 0), opacity: 0, offset: 0 },
+        { transform: at(a, b, 0.26), opacity: 1, offset: 0.13 },
+        { transform: at(a, b, 1), opacity: 1, offset: 0.5 },
+        { transform: at(b, c, 0.64), opacity: 1, offset: 0.82 },
+        { transform: at(b, c, 1), opacity: 0, offset: 1 },
+      ],
+      { duration: TRAVEL, easing: "cubic-bezier(0.76, 0, 0.24, 1)", fill: "forwards" },
+    );
+    return () => animation.cancel();
+  }, [playing, litJoint, L, joints, pieces]);
+
   const joinedTo = (i: number) => joints.flatMap((j, index) => (j.from === i || j.to === i ? [index] : []));
 
   const go = (to: number) => {
     if (!count) return;
+    touched.current = true;
+    setPlaying(false);
     setStep(((to % count) + count) % count);
   };
 
+  // Play walks the steps on its own, from here (or from the start, at the end) to the last one.
+  const play = () => {
+    touched.current = true;
+    if (playing) return setPlaying(false);
+    if (current >= count - 1) setStep(0);
+    setPlaying(true);
+  };
+  React.useEffect(() => {
+    if (!playing) return;
+    if (current >= count - 1) {
+      const timer = window.setTimeout(() => setPlaying(false), dwell(steps[current]));
+      return () => window.clearTimeout(timer);
+    }
+    const timer = window.setTimeout(() => setStep(current + 1), dwell(steps[current]));
+    return () => window.clearTimeout(timer);
+  }, [playing, current, count, steps]);
+
+  // Once, after the entrance, when the figure is half in view: one walk through the steps.
+  React.useEffect(() => {
+    if (turn.replay || turn.live || isStill() || count < 2 || touched.current) return;
+    return whenSeen(card.current, turn.key, () => {
+      if (touched.current) return 0;
+      setStep(0);
+      setPlaying(true);
+      return steps.reduce((total, s) => total + dwell(s), 300);
+    });
+  }, [turn.replay, turn.live, turn.key, count, steps]);
+
   const hoverPiece = (i: number | null) => {
+    if (i !== null) {
+      touched.current = true;
+      setPlaying(false);
+    }
     setHover(i);
     post({ type: "hover", ref: i === null ? null : (pieces[i]!.ref?.entry.id ?? null) });
   };
@@ -152,6 +224,7 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
   return (
     <figure className="g-puzzle">
       <div
+        ref={card}
         className="g-card"
         tabIndex={0}
         role="group"
@@ -162,6 +235,7 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
           else if (event.key === "ArrowLeft" || event.key === "ArrowUp") go(current - 1);
           else if (event.key === "Home") go(0);
           else if (event.key === "End") go(count - 1);
+          else if (event.key === " " && event.target === event.currentTarget) play();
           else return;
           event.preventDefault();
         }}
@@ -170,11 +244,15 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
           <span className="g-puzzle-title">{model.title}</span>
           {count ? (
             <span className="g-walk-nav">
-              <span className="g-readout" aria-live="polite">
+              <span className="g-readout" aria-live={playing ? "off" : "polite"}>
                 {readout}
               </span>
               <button type="button" className="g-button g-step-button" aria-label={S.prevStep} onClick={() => go(current - 1)}>
                 ‹
+              </button>
+              <button type="button" className="g-button g-play" aria-pressed={playing} aria-label={playing ? S.pauseSteps : S.playSteps} onClick={play}>
+                {playing ? <Pause size={12} strokeWidth={2.25} aria-hidden="true" /> : <Play size={12} strokeWidth={2.25} aria-hidden="true" />}
+                <span className="g-play-label">{playing ? S.pause : S.play}</span>
               </button>
               <button type="button" className="g-button g-step-button" aria-label={S.nextStep} onClick={() => go(current + 1)}>
                 ›
@@ -299,6 +377,10 @@ function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
               );
             })}
           </ol>
+
+          <span ref={token} className="g-token" aria-hidden="true">
+            {litJoint >= 0 && joints[litJoint] ? fit(joints[litJoint]!.label, 220, 7.4) : ""}
+          </span>
 
           <ul className="g-joints" aria-label={S.joints}>
             {L.seams.map((seam) => {

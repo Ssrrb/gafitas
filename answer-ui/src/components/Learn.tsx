@@ -152,7 +152,11 @@ function sideRows(side: SideProps | undefined, refs: RefTable, context: number) 
   return r.ok ? codeRows(r.ref.entry, r.ref.from, r.ref.to, r.ref.line, context) : null;
 }
 
-function SidePane({ side, rows }: { side: SideProps; rows: CodeRow[] | null }) {
+/** The names a line uses, for the echo between two sides: 4+ characters, not keywords. */
+const STOP = new Set(["self", "this", "return", "const", "def", "function", "async", "await", "None", "null", "true", "false"]);
+const namesIn = (text: string) => new Set((text.match(/[A-Za-z_$][\w$]{3,}/g) ?? []).filter((w) => !STOP.has(w)));
+
+function SidePane({ side, rows, echo, onHoverText }: { side: SideProps; rows: CodeRow[] | null; echo?: (text: string) => boolean; onHoverText?: (text: string | null) => void }) {
   const refs = useRefs();
   const r = resolveRef(side.ref, refs);
   if (!r.ok || !rows) return <section className="g-side" />;
@@ -166,7 +170,7 @@ function SidePane({ side, rows }: { side: SideProps; rows: CodeRow[] | null }) {
       <h3 className="g-side-title">
         <code>{side.title}</code> <RefChip cite={side.ref ?? ""} label={fileOf(entry)} />
       </h3>
-      <CodeLines entry={entry} rows={rows} />
+      <CodeLines entry={entry} rows={rows} echo={echo} onHoverText={onHoverText} />
       {/* Older chats wrote points; one at most, the code says the rest. */}
       {side.points?.length ? (
         <p className="g-side-point">
@@ -179,7 +183,12 @@ function SidePane({ side, rows }: { side: SideProps; rows: CodeRow[] | null }) {
 
 export function SideBySideBlock({ title, left, right, note }: { title?: string; left?: SideProps; right?: SideProps; note?: string }) {
   const refs = useRefs();
+  // A line hovered on one side lights the lines on the other that use the same names.
+  const [hovered, setHovered] = React.useState<{ side: "l" | "r"; names: Set<string> } | null>(null);
   if (!left || !right) return null;
+  const echoOn = (side: "l" | "r") =>
+    hovered && hovered.side !== side && hovered.names.size ? (text: string) => [...namesIn(text)].some((w) => hovered.names.has(w)) : undefined;
+  const hoverOn = (side: "l" | "r") => (text: string | null) => setHovered(text ? { side, names: namesIn(text) } : null);
   let l = sideRows(left, refs, 1);
   let r = sideRows(right, refs, 1);
   // Even the panes: the shorter side shows a little more of its own context.
@@ -197,8 +206,8 @@ export function SideBySideBlock({ title, left, right, note }: { title?: string; 
           </header>
         ) : null}
         <div className="g-sxs-grid">
-          <SidePane side={left} rows={l} />
-          <SidePane side={right} rows={r} />
+          <SidePane side={left} rows={l} echo={echoOn("l")} onHoverText={hoverOn("l")} />
+          <SidePane side={right} rows={r} echo={echoOn("r")} onHoverText={hoverOn("r")} />
         </div>
       </div>
       {note ? (

@@ -48,15 +48,23 @@ function useSend() {
 
 const EFFORT: Record<string, string> = { bajo: "bajo", poco: "bajo", low: "bajo", medio: "medio", medium: "medio", alto: "alto", mucho: "alto", high: "alto" };
 export const effortOf = (v: unknown) => EFFORT[str(v).toLowerCase()] ?? "";
+const LEVEL: Record<string, number> = { bajo: 1, medio: 2, alto: 3 };
+
+/** A chip's name: the place's name, or its file when that name is a fragment of code. */
+const chipName = (entry: { path: string }, name: string) => (/\s|#/.test(name) ? (entry.path.split("/").pop() ?? name) : name);
 
 export function WaysBlock({ props, statementId }: { props: Record<string, unknown>; statementId?: string }) {
   const refs = useRefs();
   const send = useSend();
   const { turn, chosen, closed } = usePickState(statementId);
   const [sent, setSent] = React.useState<string | null>(null);
+  // The way under the pointer or focus: the code it reuses lights up in the other ways.
+  const [hot, setHot] = React.useState<string | null>(null);
   const ways = nodes(props.ways, "Way");
   if (ways.length < 2) return null;
   const question = str(props.question);
+  const usesOf = (way: Node) => (Array.isArray(way.props?.uses) ? way.props.uses : []).map(String).filter((cite) => resolveRef(cite, refs).ok).slice(0, 2);
+  const hotRefs = new Set(hot === null ? [] : ways.filter((w) => (w.statementId ?? str(w.props?.title)) === hot).flatMap((w) => usesOf(w).map((cite) => (resolveRef(cite, refs) as { ok: true; ref: { entry: { id: string } } }).ref.entry.id)));
   return (
     <section className="g-panel g-ways" aria-label={question} data-count={ways.length}>
       <h2 className="g-panel-title">{question}</h2>
@@ -65,12 +73,22 @@ export function WaysBlock({ props, statementId }: { props: Record<string, unknow
           const p = way.props ?? {};
           const id = way.statementId ?? str(p.title);
           const title = str(p.title);
-          const uses = (Array.isArray(p.uses) ? p.uses : []).map(String).filter((cite) => resolveRef(cite, refs).ok).slice(0, 2);
+          const uses = usesOf(way);
           const effort = effortOf(p.effort);
           const picked = chosen.has(id) || sent === id;
           const others = ways.filter((w) => w !== way).map((w) => `${w.statementId} «${str(w.props?.title)}»`).join(", ");
           return (
-            <article key={id} className="g-way" data-picked={picked ? "" : undefined}>
+            <article
+              key={id}
+              className="g-way"
+              data-picked={picked ? "" : undefined}
+              data-hot={hot === id ? "" : undefined}
+              data-cold={hot !== null && hot !== id ? "" : undefined}
+              onPointerEnter={() => setHot(id)}
+              onPointerLeave={() => setHot(null)}
+              onFocus={() => setHot(id)}
+              onBlur={() => setHot(null)}
+            >
               <h3 className="g-way-title">
                 <Icon name={p.icon} />
                 <span>{title}</span>
@@ -82,7 +100,7 @@ export function WaysBlock({ props, statementId }: { props: Record<string, unknow
                   <span className="g-way-chips">
                     {uses.map((cite) => {
                       const r = resolveRef(cite, refs);
-                      return <RefChip key={cite} cite={cite} label={r.ok ? placeName(r.ref.entry, r.ref.from) : undefined} />;
+                      return r.ok ? <RefChip key={cite} cite={cite} shape="tile" echo={hot !== id && hotRefs.has(r.ref.entry.id)} label={chipName(r.ref.entry, placeName(r.ref.entry, r.ref.from))} /> : null;
                     })}
                   </span>
                 ) : (
@@ -91,6 +109,13 @@ export function WaysBlock({ props, statementId }: { props: Record<string, unknow
               </div>
               <p className="g-way-effort">
                 <span className="g-way-label">{S.effort}</span> {effort || "—"}
+                {effort ? (
+                  <span className="g-meter" data-level={LEVEL[effort]} aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                ) : null}
               </p>
               {str(p.tradeoff) ? (
                 <p className="g-way-tradeoff">
@@ -220,6 +245,8 @@ export function BoardBlock({ props, statementId }: { props: Record<string, unkno
   const selected = useSelected();
   const send = useSend();
   const { turn, chosen, closed } = usePickState(statementId);
+  // A missing piece under the pointer rings the code it goes with, under "Ya tienes".
+  const [near, setNear] = React.useState<string | null>(null);
   const items = nodes(props.items, "Item");
   if (items.length < 2) return null;
   const title = str(props.title);
@@ -262,6 +289,7 @@ export function BoardBlock({ props, statementId }: { props: Record<string, unkno
                     data-tint={r.ok ? ((r.ref.entry.tint ?? 0) % 4) + 1 : undefined}
                     data-selected={r.ok && selected === r.ref.entry.id ? "" : undefined}
                     data-asked={asked ? "" : undefined}
+                    data-near={column === "tienes" && near !== null ? (r.ok && r.ref.entry.id === near ? "on" : "off") : undefined}
                   >
                     <button
                       type="button"
@@ -281,8 +309,17 @@ export function BoardBlock({ props, statementId }: { props: Record<string, unkno
                           note: `The user asked about ${id} «${itemTitle}» (${column}) on your Board ${statementId} in ${turn.id}.`,
                         });
                       }}
-                      onPointerEnter={() => r.ok && post({ type: "hover", ref: r.ref.entry.id })}
-                      onPointerLeave={() => post({ type: "hover", ref: null })}
+                      onPointerEnter={() => {
+                        if (!r.ok) return;
+                        post({ type: "hover", ref: r.ref.entry.id });
+                        if (column !== "tienes") setNear(r.ref.entry.id);
+                      }}
+                      onPointerLeave={() => {
+                        post({ type: "hover", ref: null });
+                        setNear(null);
+                      }}
+                      onFocus={() => r.ok && column !== "tienes" && setNear(r.ref.entry.id)}
+                      onBlur={() => setNear(null)}
                     />
                     <h4 className="g-board-title">
                       <Icon name={p.icon} />

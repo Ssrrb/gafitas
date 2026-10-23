@@ -1,0 +1,2 @@
+w1 = Way("Montar un HTTPAdapter con Retry", "sync", "Pasa un Retry al HTTPAdapter que montas.", "bajo", "Solo reintenta lo que urllib3 repite.", ["r2:696-709"])
+w3 = Way("Reintentar en tu código", "wrench", "Un decorador repite la llamada.", "bajo", "No distingue errores.")

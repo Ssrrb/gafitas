@@ -1,77 +1,57 @@
 import AppKit
-import Quartz
 import ServiceManagement
 import SwiftUI
 
 /// Launch arguments for testing without clicks or keystrokes (the terminal has no Accessibility permission):
 ///
-///     -debugOffscreen YES     build and draw windows and the panel but never show them or activate the app, so
-///                             snapshot runs don't take the keyboard from whoever is at the Mac (no key tests then)
+///     -debugOffscreen YES     build and draw windows but never show them or activate the app, so
+///                             snapshot runs don't take the keyboard from whoever is at the Mac
 ///     -debugMenu YES          log the menu once the index is open, then run Pause and Resume and log it again
-///     -debugQuery "<text>"    open the panel and search for <text>, as if it had been typed ("": the empty panel)
-///     -debugSnapshot <png>    once the final results and their pictures are showing, draw the panel into <png>
-///     -debugKeys "down,space,esc,cmd+c"   then press these keys (posted through the app's own event queue, so
-///                             no Accessibility permission is needed) and log what each one did. ⌘C goes to a
-///                             private pasteboard. Keys: down, up, left, right, space, esc, return, cmd+c,
-///                             cmd+y, cmd+o, cmd+1, cmd+2, cmd+comma and letters; `settings`, `window` and `panel`
-///                             open those, `wait` waits. Each goes to the window that has the keyboard. With
-///                             -debugWindow search they test the window instead.
-///     -debugType "a|b c"      then type each query (|-separated) into the field, one key every
-///                             `-debugTypeInterval` seconds (default 0.09), waiting for its final results; the panel
-///                             logs how long after the last keystroke they arrived
-///     -debugCompose YES       then compose 사업자 the way a Korean input method does (marked text) while results
-///                             arrive, and log whether the composition held
-///     -debugSelect "<name>"   before the snapshot, select the first result whose name contains <name>
-///     -debugPlay YES          after the snapshot, play the selected recording from its moment (muted) for 1.5 s and
-///                             log where playback got to
-///     -debugOpen dry|YES      then open the selected result: `dry` logs where and how it would open (the page's
-///                             words for Preview, QuickTime Player at the moment…) without opening; YES opens it
-///                             (another app comes forward, so only with someone at the Mac)
-///     -debugQuickLook YES     then show Quick Look on the selected result for 2.5 s, log its display state and draw
-///                             it into <snapshot>-quicklook.png (on screen: it takes the keyboard)
+///     -debugSnapshot <png>    draw the window -debugWindow opens into <png>, once it has loaded
 ///     -debugLoginItem YES     turn open-at-login on, log what macOS says, then off again (a signed build in
 ///                             /Applications; macOS shows a notification)
 ///     -debugQuit YES          quit after that
 ///     -debugPauseAfter S / -debugResumeAfter S   press Pause / Resume S seconds after launch
-///     -debugFolders a:b -debugFoldersAfter S     choose these folders S seconds after launch (as Settings would)
-///     -debugCodeFolders a:b|off -debugCodeFoldersAfter S   the same for code search's folders ("off" turns it off)
-///     -debugIcon <png>        draw the menubar icon idle, at 0%, 42% and 90%, paused, and with an update waiting
+///     -debugCodeFolders a:b|off -debugCodeFoldersAfter S   choose these code folders S seconds after launch (as
+///                             Settings would; "off" turns code search off)
+///     -debugIcon <png>        draw the menubar icon idle, at 0%, 42% and 90%, and paused (at 4×, 2× and 1×)
 ///     -debugHotkeyCheck a,b   log what the shortcut recorder would say about each combination ("cmd+space"…)
+///     -debugDialogs <png>     draw the privacy sheet, the delete-chat alert and the delete-history alert into
+///                             <png>-privacy.png, -delete.png, -history.png (with -debugAskChat ID, the sheet counts
+///                             that chat's places; without -debugOffscreen the alerts show for a moment, so the
+///                             window server draws their glass)
 ///     -debugMenuView <png>    draw the top of the menu (status, detail, progress) into <png>, after
 ///                             -debugMenuViewAfter seconds
-///     -debugReshow N          after the query's final results, hide and show the panel N times (logs show times)
-///     -debugWindow PAGE       open a window instead of the panel and snapshot it: search (with -debugQuery),
-///                             settings:general|folders|code|storage, settings:add (Folders with Add Folders open),
-///                             settings:addcode (Code with its folders' sheet open),
-///                             onboarding:welcome|folders|code|shortcut|ready, ask (with -debugQuery, and
-///                             -debugSelect NAME to select a place, -debugAskTab map for the map,
-///                             -debugAskAnswer YES to ask for the answer and wait for it; -debugApproveProviders YES
-///                             skips the privacy sheet)
+///     -debugWindow PAGE       open a window and snapshot it:
+///                             settings:general|code|storage, settings:addcode (Code with its folders' sheet open),
+///                             onboarding:welcome|code|shortcut|ready, ask (with -debugQuery as the question,
+///                             -debugAskAnswer YES to ask for the answer and wait for it, -debugAskChat ID to reopen a
+///                             saved chat instead, -debugAskFollowUp "…" to ask that next in the same chat,
+///                             -debugAskPick "Errores de conexión|Seguir" to click those controls in the answer instead,
+///                             -debugAskOpen YES to click the first piece (-debugDryOpen YES: only log where it opens),
+///                             -debugWindowSize 980x620; -debugApproveProviders YES skips the privacy sheet; the
+///                             whole answer page also goes to <snapshot>-answer.png)
 ///                             (-debugCloseWindow YES closes it afterwards, to measure what closing gives back;
 ///                             -debugWindowAfter S opens it S seconds after launch, once the helper has reported)
-///     -debugChoices "open:real;click:real/videos;add:<path>"   before the snapshot, act on the folder list of
-///                             onboarding's folder step or of Add Folders, then log what it would apply. Actions,
+///     -debugChoices "open:code;click:code/requests;add:<path>"   before the snapshot, act on the folder list of
+///                             onboarding's code step or of the code sheet, then log what it would apply. Actions,
 ///                             `;`-separated: open:NAME (show a folder's subfolders), click:NAME (a folder's
 ///                             checkbox) or click:NAME/SUB (a subfolder's), add:PATH and skip:PATH (as picked in the
 ///                             open panel), unskip:PATH, types:heic,txt. NAME is the end of a listed folder's path.
-///     -debugAdd YES           after the snapshot, press Add Folders' Add (or the code sheet's) and log what it applied
-///     -debugFocus YES         with -debugWindow search: the field has the cursor (its ring shows) in the snapshot
-///     -debugUpdateCheck YES   check for updates in the background a second after launch, as the daily check does
+///     -debugAdd YES           after the snapshot, press the code sheet's Add and log what it applied
 ///     -debugUseModelFiles a:b take these files as the model, as Use Files… does, a second after launch
 ///     -debugHelperArgs "…"    more arguments for the indexing helper, in dev runs ("--time-limit 0")
-///     -debugQuitAfter S       log the menu and quit S seconds after launch (a downloaded update installs on quit)
-///     -debugWaitForIndex YES  wait for the model and an idle index with nothing waiting, then search for
-///                             -debugQuery in the panel (<snapshot>-5-panel.png), as -debugOnboarding auto ends
+///     -debugQuitAfter S       log the menu and quit S seconds after launch
+///     -debugWaitForIndex YES  wait for the model and an idle index with nothing waiting, as -debugOnboarding auto ends
 ///     -debugOnboarding auto   first launch, start to finish: snapshot each onboarding step (<snapshot>-1-welcome.png
-///                             …), continue through it (the download starts, the folders apply), wait for the model
-///                             and the first index, then search for -debugQuery in the panel (<snapshot>-N-panel.png)
-///     -debugSearchCode YES    on onboarding's code step (or -debugWindow onboarding:code), turn code search on
+///                             …), continue through it (the download starts, the folders apply), then wait for the
+///                             model and the first index
 ///     -codeLocations a:b      the folders offered for code search (dev runs offer none without it)
 enum DebugHooks {
     /// A debug run that decides what to show (the window a launch by hand opens would get in its way).
     static var drivesUI: Bool {
-        ["debugOnboarding", "debugWindow", "debugQuery", "debugLoginItem", "debugWaitForIndex", "debugMenu",
-         "debugMenuView", "debugIcon", "debugKeys", "debugType"].contains { UserDefaults.standard.object(forKey: $0) != nil }
+        ["debugOnboarding", "debugWindow", "debugLoginItem", "debugWaitForIndex", "debugMenu", "debugMenuView", "debugDialogs",
+         "debugIcon"].contains { UserDefaults.standard.object(forKey: $0) != nil }
     }
 
     static func run(_ app: AppController) {
@@ -101,12 +81,6 @@ enum DebugHooks {
                 app.engine.setPaused(false)
             }
         }
-        if let folders = defaults.string(forKey: "debugFolders") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + defaults.double(forKey: "debugFoldersAfter")) {
-                log("debug: folders → \(folders)")
-                app.applyFolders(folders.split(separator: ":").map { AppSettings.folderURL(String($0)) })
-            }
-        }
         if let folders = defaults.string(forKey: "debugCodeFolders") {
             DispatchQueue.main.asyncAfter(deadline: .now() + defaults.double(forKey: "debugCodeFoldersAfter")) {
                 log("debug: code folders → \(folders)")
@@ -119,12 +93,6 @@ enum DebugHooks {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 log("debug: model files chosen: \(files)")
                 app.model.download.use(files.split(separator: ":").map { URL(fileURLWithPath: String($0)) })
-            }
-        }
-        if defaults.bool(forKey: "debugUpdateCheck") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                log("debug: checking for updates in the background")
-                app.updates.checkInBackground()
             }
         }
         if defaults.object(forKey: "debugQuitAfter") != nil {
@@ -148,6 +116,14 @@ enum DebugHooks {
                 log("hotkey check: \(combo.display): " + (combo.systemConflict ?? (free ? "free" : "taken by another app")))
             }
         }
+        if let path = defaults.string(forKey: "debugDialogs") {
+            if let id = defaults.string(forKey: "debugAskChat") { app.openChat(id) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                drawDialogs(app, to: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+                if defaults.bool(forKey: "debugQuit") { NSApp.terminate(nil) }
+            }
+            return
+        }
         if let path = defaults.string(forKey: "debugMenuView") {
             DispatchQueue.main.asyncAfter(deadline: .now() + defaults.double(forKey: "debugMenuViewAfter")) {
                 drawMenuHeader(app, to: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
@@ -157,21 +133,13 @@ enum DebugHooks {
             let menu = app.statusMenu!
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 log("menu: \(menu.describeMenu())")
-                menu.performItem(titled: "Pause Indexing")
+                menu.performItem(titled: "Pausar la lectura")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     log("menu after Pause: \(menu.describeMenu())")
-                    menu.performItem(titled: "Resume Indexing")
+                    menu.performItem(titled: "Reanudar la lectura")
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         log("menu after Resume: \(menu.describeMenu())")
                     }
-                }
-            }
-        }
-        if let text = defaults.string(forKey: "debugQuery") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                searchInPanel(text, app, snapshot: snapshotPath()) {
-                    if AppController.offscreen { app.panel.hide() }   // as Esc would: its pictures are dropped
-                    if defaults.bool(forKey: "debugQuit") { NSApp.terminate(nil) }
                 }
             }
         }
@@ -194,107 +162,9 @@ enum DebugHooks {
         }
     }
 
-    /// Opens the panel with `text`, waits for its final results and pictures, snapshots it, runs the key and typing
-    /// tests, then `done`.
-    private static func searchInPanel(_ text: String, _ app: AppController, snapshot: URL?,
-                                      then done: @escaping () -> Void) {
-        let defaults = UserDefaults.standard
-        let panel = app.panel!
-        if text.isEmpty {   // the panel as the hotkey opens it: nothing to wait for
-            panel.show()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                save("panel", { try panel.snapshot(to: $0) }, to: snapshot)
-                done()
-            }
-            return
-        }
-        let keys = defaults.string(forKey: "debugKeys")?.split(separator: ",").map {
-            $0.trimmingCharacters(in: .whitespaces)
-        } ?? []
-        if !keys.isEmpty {
-            panel.pasteboard = NSPasteboard(name: NSPasteboard.Name("com.ssrrb.Gafitas.debug"))
-            panel.pasteboard.clearContents()
-        }
-        let typed = defaults.string(forKey: "debugType")?.split(separator: "|").map(String.init) ?? []
-        let interval = defaults.object(forKey: "debugTypeInterval") == nil
-            ? 0.09 : defaults.double(forKey: "debugTypeInterval")
-        panel.onFinalResults = {
-            panel.onFinalResults = nil
-            if let name = defaults.string(forKey: "debugSelect") {
-                if let row = panel.rows.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
-                    panel.select(row)
-                    log("debug: selected \(row.name) (\(row.place ?? "no page or moment"), \(row.reason))")
-                } else {
-                    log("debug: no result named like \"\(name)\"")
-                }
-            }
-            whenPicturesSettle {
-                save("panel", { try panel.snapshot(to: $0) }, to: snapshot)
-                let row = panel.selectedRow
-                play(row) {
-                    openSelected(row, app) {
-                        quickLook(row, panel: panel, snapshot: snapshotPath("quicklook")) {
-                            press(keys, app, describe: { panelState(panel) }) {
-                                type(typed, in: panel, every: interval) {
-                                    compose(in: panel) {
-                                        reshow(panel, times: defaults.integer(forKey: "debugReshow"), then: done)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        panel.show()
-        panel.query = text
-    }
-
-    /// `-debugPlay`: plays `row` from its moment, muted, and logs where playback is 1.5 s later.
-    private static func play(_ row: ResultRow?, then done: @escaping () -> Void) {
-        guard UserDefaults.standard.bool(forKey: "debugPlay"), let row else { return done() }
-        let playback = PreviewPlayback.shared
-        playback.muted = true
-        playback.play(row)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            let at = playback.player?.currentTime().seconds ?? -1
-            log("debug: playback of \(row.name) from \(ResultRow.clock(row.moment ?? 0)) is at "
-                + String(format: "%.2f s", at) + " after 1.5 s (\(playback.isPlaying ? "playing" : "stopped"))")
-            playback.stop()
-            done()
-        }
-    }
-
-    /// `-debugOpen dry|YES`: opens `row` as ↩ would (dry: only logs how).
-    private static func openSelected(_ row: ResultRow?, _ app: AppController, then done: @escaping () -> Void) {
-        guard let mode = UserDefaults.standard.string(forKey: "debugOpen"), let row else { return done() }
-        Opener.dryRun = mode == "dry"
-        app.engine.open(row)
-        // A real open waits for the other app to report back (QuickTime Player says where it is).
-        DispatchQueue.main.asyncAfter(deadline: .now() + (Opener.dryRun ? 0.5 : 6), execute: done)
-    }
-
-    /// `-debugQuickLook`: Space on `row`, then what Quick Look shows (it's on screen, and takes the keyboard).
-    private static func quickLook(_ row: ResultRow?, panel: SearchPanelController, snapshot: URL?,
-                                  then done: @escaping () -> Void) {
-        guard UserDefaults.standard.bool(forKey: "debugQuickLook"), row != nil else { return done() }
-        panel.toggleQuickLook()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            let preview = QLPreviewPanel.shared()!
-            log("debug: Quick Look \(preview.isVisible ? "open" : "closed") on "
-                + "\(preview.currentPreviewItem?.previewItemURL?.lastPathComponent ?? "nothing"), state "
-                + "\(String(describing: preview.displayState).replacingOccurrences(of: "\n", with: " "))")
-            if let snapshot { save("quick look", { try Snapshot.capture(preview, to: $0) }, to: snapshot) }
-            preview.orderOut(nil)
-            done()
-        }
-    }
-
-    /// Thumbnails and previews load asynchronously; give them a moment (and up to 5 s) before drawing.
+    /// Views that load asynchronously (code cards, the answer page) get a moment before drawing.
     private static func whenPicturesSettle(_ body: @escaping () -> Void) {
-        Thumbnails.shared.whenIdle(timeout: 5) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { body() }
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { body() }
     }
 
     // MARK: Windows
@@ -317,14 +187,6 @@ enum DebugHooks {
                 loaded = { app.settingsWindow.state.isLoaded && sheet.choices?.estimatesDone ?? false }
                 draw = { try sheet.snapshot(to: $0) }
                 close = { sheet.end() }
-            case "settings" where parts.count > 1 && parts[1] == "add":
-                app.showSettings(.folders)
-                app.settingsWindow.addFolders()
-                let sheet = app.settingsWindow.addSheet
-                choices = { sheet.choices }
-                loaded = { app.settingsWindow.state.isLoaded && sheet.choices?.estimatesDone ?? false }
-                draw = { try sheet.snapshot(to: $0) }
-                close = { sheet.end() }
             case "settings":
                 let tab = SettingsTab(rawValue: parts.count > 1 ? parts[1] : "general") ?? .general
                 app.showSettings(tab)
@@ -337,86 +199,82 @@ enum DebugHooks {
                 if parts.count > 1, let step = OnboardingState.Step.allCases.first(where: { "\($0)" == parts[1] }) {
                     onboarding.state.go(to: step)
                 }
-                if onboarding.state.step == .code, defaults.bool(forKey: "debugSearchCode") {
-                    onboarding.state.searchCode = true
-                }
-                choices = {
-                    switch onboarding.state.step {
-                    case .folders: onboarding.state.folders
-                    case .code: onboarding.state.searchCode ? onboarding.state.codeFolders : nil
-                    default: nil
-                    }
-                }
+                choices = { onboarding.state.step == .code ? onboarding.state.codeFolders : nil }
                 loaded = { onboarding.state.isLoaded }
                 draw = { try onboarding.snapshot(to: $0) }
                 close = { onboarding.close() }
             case "ask":
                 app.showAsk(question: defaults.string(forKey: "debugQuery") ?? "")
                 let ask = app.askWindow.ask
-                if let pick = defaults.string(forKey: "debugSelect") {
-                    waitUntil({ ask.dug }, deadline: Date().addingTimeInterval(30)) {
-                        if let row = ask.places.first(where: { $0.name.contains(pick) }) { ask.select(row) }
+                Opener.dryRun = defaults.bool(forKey: "debugDryOpen")
+                let reopened = defaults.string(forKey: "debugAskChat")
+                if let reopened { app.openChat(reopened) }
+                let answering = defaults.bool(forKey: "debugAskAnswer")
+                let followUp = defaults.string(forKey: "debugAskFollowUp")
+                let pick = defaults.string(forKey: "debugAskPick")
+                var shot = false
+                let settled = { ask.answer == .done || { if case .failed = ask.answer { true } else { false } }() }
+                // The figure settles, then WebKit draws it, on screen and as the whole page.
+                let capture = {
+                    log("ask: answer \(ask.answer)")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        if defaults.bool(forKey: "debugAskOpen") {
+                            ask.bridge.webView.evaluateJavaScript("document.querySelector('button.g-tile')?.click()")
+                        }
+                        app.askWindow.captureAnswer { shot = true }
                     }
                 }
-                if defaults.string(forKey: "debugAskTab") == "map" { ask.tab = .map }
-                // -debugAskAnswer YES: ask for the answer too, and wait for it (and the page's own picture).
-                let answering = defaults.bool(forKey: "debugAskAnswer")
-                var shot = false
+                let thenFollowUp = {
+                    if let pick, let words = try? JSONSerialization.data(withJSONObject: pick.components(separatedBy: "|")) {
+                        // Click each control whose text starts with these words, in order, as the reader would.
+                        let before = ask.chat?.turns.count ?? 0
+                        let script = "for (const w of \(String(decoding: words, as: UTF8.self))) [...document.querySelectorAll('button, label')].find((el) => el.textContent.trim().startsWith(w))?.click()"
+                        ask.bridge.webView.evaluateJavaScript(script)
+                        log("ask: picked \(pick)")
+                        return waitUntil({ (ask.chat?.turns.count ?? 0) > before && settled() }, deadline: Date().addingTimeInterval(300)) { capture() }
+                    }
+                    guard let followUp else { return capture() }
+                    ask.followUp = followUp
+                    ask.sendFollowUp()
+                    waitUntil({ settled() }, deadline: Date().addingTimeInterval(300)) { capture() }
+                }
                 if answering {
                     waitUntil({ ask.dug }, deadline: Date().addingTimeInterval(30)) { ask.askNow() }
-                    waitUntil({ ask.answer == .done || { if case .failed = ask.answer { true } else { false } }() },
-                              deadline: Date().addingTimeInterval(300)) {
-                        log("ask: answer \(ask.answer) · \(ask.progress)")
-                        // The figure's motion settles, then WebKit draws it for the snapshot.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            app.askWindow.captureAnswer { shot = true }
-                        }
+                    waitUntil({ ask.chat != nil && settled() }, deadline: Date().addingTimeInterval(300), then: thenFollowUp)
+                } else if reopened != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { thenFollowUp() }
+                }
+                loaded = { answering || reopened != nil ? shot : ask.trimmed.isEmpty || ask.dug }
+                draw = { url in
+                    try app.askWindow.snapshot(to: url)
+                    if let page = app.askWindow.pageShot, let full = snapshotPath("answer") {
+                        try Snapshot.write(page, background: NSColor(Brand.sheet), appearance: NSApp.effectiveAppearance, to: full)
+                        log("snapshot: the whole answer → \(full.path)")
                     }
                 }
-                loaded = {
-                    (ask.trimmed.isEmpty || (ask.dug && (defaults.string(forKey: "debugSelect") == nil || ask.navigated)))
-                        && (ask.tab != .map || ask.map != nil) && (!answering || shot)
-                }
-                draw = { try app.askWindow.snapshot(to: $0) }
                 close = { app.askWindow.close() }
             default:
-                app.showSearchWindow(query: defaults.string(forKey: "debugQuery") ?? "")
-                let search = app.searchWindow.search
-                // The field with the cursor, as on screen (an offscreen window doesn't take it by itself).
-                if defaults.bool(forKey: "debugFocus") { DispatchQueue.main.async { search.focusField() } }
-                loaded = { search.query.isEmpty || search.hasResults }
-                draw = { try app.searchWindow.snapshot(to: $0) }
-                close = { app.searchWindow.close() }
+                return log("window: don't know \"\(page)\"")
             }
-            let keys = defaults.string(forKey: "debugKeys")?.split(separator: ",").map {
-                $0.trimmingCharacters(in: .whitespaces)
-            } ?? []
-            waitUntil(loaded, deadline: Date().addingTimeInterval(defaults.bool(forKey: "debugAskAnswer") ? 330 : 30)) {
+            let long = defaults.bool(forKey: "debugAskAnswer") || defaults.string(forKey: "debugAskFollowUp") != nil
+            waitUntil(loaded, deadline: Date().addingTimeInterval(long ? 660 : 30)) {
                 log("window: \(page) loaded in \(ms(since: started)) (after a 0.5 s launch delay)")
                 if let list = choices() { act(on: list) }
                 waitUntil({ choices()?.estimatesDone ?? true }, deadline: Date().addingTimeInterval(30)) {
                     whenPicturesSettle {
                         save(page, draw, to: snapshotPath())
                         if let list = choices() { log("choices: \(describe(list))") }
-                        if defaults.bool(forKey: "debugAdd"), app.settingsWindow.addSheet.isOpen {
-                            app.settingsWindow.addSheet.add()
-                            let settings = app.model.settings
-                            log("debug: added; folders \(settings.roots.map { tildePath($0.path) }) · skipping "
-                                + "\(settings.excludedFolders.map { tildePath($0.path) })")
-                        }
                         if defaults.bool(forKey: "debugAdd"), app.settingsWindow.codeSheet.isOpen {
                             app.settingsWindow.codeSheet.add()
                             let settings = app.model.settings
                             log("debug: added; code folders \(settings.codeRoots.map { tildePath($0.path) }) · "
                                 + "skipping \(settings.codeExcluded.map { tildePath($0.path) })")
                         }
-                        press(keys, app, describe: { windowState(app) }) {
-                            if defaults.bool(forKey: "debugCloseWindow") {
-                                close()
-                                log("window: closed")
-                            }
-                            if defaults.bool(forKey: "debugQuit") { NSApp.terminate(nil) }
+                        if defaults.bool(forKey: "debugCloseWindow") {
+                            close()
+                            log("window: closed")
                         }
+                        if defaults.bool(forKey: "debugQuit") { NSApp.terminate(nil) }
                     }
                 }
             }
@@ -465,23 +323,18 @@ enum DebugHooks {
         }
     }
 
-    /// How many steps the onboarding just run had (the panel's snapshot is numbered after them).
-    private static var onboardingStepCount = 4
-
     /// Snapshots step `index` (of the steps this Mac gets), then presses its Continue (Get Started, Continue…, Done).
-    /// On the folder step, `-debugChoices` acts on the list first; on the code step, `-debugSearchCode` turns it on.
+    /// On the code step, `-debugChoices` acts on the list first.
     private static func onboardingStep(_ index: Int, _ onboarding: OnboardingController, _ app: AppController) {
         let state = onboarding.state
-        onboardingStepCount = state.steps.count
         guard index < state.steps.count else { return waitForFirstIndex(app) }
         let name = "\(index + 1)-\(state.step)"
-        if state.step == .code, UserDefaults.standard.bool(forKey: "debugSearchCode") { state.searchCode = true }
         waitUntil({ state.isLoaded }, deadline: Date().addingTimeInterval(60)) {
-            if state.step == .folders { act(on: state.folders) }
+            if state.step == .code { act(on: state.codeFolders) }
             waitUntil({ state.isLoaded }, deadline: Date().addingTimeInterval(60)) {
                 whenPicturesSettle {
                     save(name, { try onboarding.snapshot(to: $0) }, to: snapshotPath(name))
-                    if state.step == .folders { log("choices: \(describe(state.folders))") }
+                    if state.step == .code { log("choices: \(describe(state.codeFolders))") }
                     stamp("step \(name) done")
                     state.next()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { onboardingStep(index + 1, onboarding, app) }
@@ -539,16 +392,13 @@ enum DebugHooks {
                 lastLog = Date()
                 log("first launch: waiting · \(app.model.statusLine) · model \(app.download.progressText)")
             }
-            guard app.download.isReady, case .idle = app.model.status.activity else { return false }
-            return app.model.status.pending == 0 && app.model.status.searchable > 0
+            let code = app.model.status.code
+            guard app.download.isReady, case .idle = app.model.status.activity, code.indexing == nil else { return false }
+            return code.pending == 0 && code.searchable > 0
         }
         waitUntil(finished, deadline: Date().addingTimeInterval(45 * 60)) {
             stamp("model ready and first index done (\(app.model.statusLine))")
-            let text = UserDefaults.standard.string(forKey: "debugQuery") ?? "zebra"
-            searchInPanel(text, app, snapshot: snapshotPath("\(onboardingStepCount + 1)-panel")) {
-                stamp("searched \"\(text)\"")
-                if UserDefaults.standard.bool(forKey: "debugQuit") { NSApp.terminate(nil) }
-            }
+            if UserDefaults.standard.bool(forKey: "debugQuit") { NSApp.terminate(nil) }
         }
     }
 
@@ -557,154 +407,31 @@ enum DebugHooks {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { waitUntil(condition, deadline: deadline, then: body) }
     }
 
-    // MARK: Panel keys
-
-    private static func reshow(_ panel: SearchPanelController, times: Int, then done: @escaping () -> Void) {
-        guard times > 0 else { return done() }
-        panel.hide()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            panel.show()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                reshow(panel, times: times - 1, then: done)
+    /// The dialogs offscreen runs can't show: drawn from the same code the app runs them with.
+    private static func drawDialogs(_ app: AppController, to url: URL) {
+        let base = url.deletingPathExtension().path
+        let sheet = NSHostingView(rootView: PrivacySheet(ask: app.askWindow.ask, provider: "opencode-go"))
+        sheet.frame.size = sheet.fittingSize
+        let window = NSWindow(contentRect: sheet.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = sheet
+        save("privacy sheet", { try Snapshot.write(window, to: $0) }, to: URL(fileURLWithPath: base + "-privacy.png"))
+        let alerts = [("delete", AskModel.deleteAlert(questions: 2)), ("history", SettingsState.historyAlert())]
+        for (name, alert) in alerts {
+            alert.layout()
+            let file = URL(fileURLWithPath: base + "-\(name).png")
+            if AppController.offscreen {
+                save("\(name) alert", { try Snapshot.write(alert.window, to: $0) }, to: file)
+                continue
             }
+            // cacheDisplay draws an alert's glass as blank white in dark mode: shown for a moment (the app isn't
+            // activated), the window server draws it as it really looks.
+            alert.window.center()
+            alert.window.orderFrontRegardless()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+            save("\(name) alert", { try Snapshot.capture(alert.window, to: $0) }, to: file)
+            alert.window.orderOut(nil)
         }
     }
-
-    /// Posts each key to the window that has the keyboard (the panel, Quick Look, a window), 0.5 s apart, and logs
-    /// `describe()` after it. Not keys: `settings`, `window` and `panel` open those; `wait` just waits.
-    private static func press(_ keys: [String], _ app: AppController, describe: @escaping () -> String,
-                              then done: @escaping () -> Void) {
-        guard let key = keys.first else { return done() }
-        let next = { press(Array(keys.dropFirst()), app, describe: describe, then: done) }
-        switch key {
-        case "settings": app.showSettings()
-        case "window": app.showSearchWindow()
-        case "panel": app.panel.show()
-        case "wait": break
-        default:
-            guard let event = keyEvent(key, window: NSApp.keyWindow?.windowNumber ?? app.panel.windowNumber) else {
-                log("keys: don't know \"\(key)\"")
-                return next()
-            }
-            NSApp.postEvent(event, atStart: false)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            let keyWindow = NSApp.keyWindow.map { window in
-                window is QLPreviewPanel ? "Quick Look" : window is SearchPanelWindow ? "panel"
-                    : window.title.isEmpty ? "\(Swift.type(of: window))" : window.title
-            } ?? "none"
-            log("keys: \(key) → \(describe()) · keyboard: \(keyWindow)" + (NSApp.isHidden ? " · app hidden" : ""))
-            next()
-        }
-    }
-
-    /// The panel's state, for key tests.
-    private static func panelState(_ panel: SearchPanelController) -> String {
-        let ids = panel.rowIDs
-        let index = ids.firstIndex { $0 == panel.selection }.map { "\($0 + 1)" } ?? "-"
-        let copied = panel.pasteboard.readObjects(forClasses: [NSURL.self])?.first as? URL
-        let selected = panel.selection == SearchPanelController.weakerToggle ? "the weaker-matches fold"
-            : panel.selectedRow?.name ?? "none"
-        return "row \(index) of \(ids.count) (\(selected)) · weaker \(panel.showWeaker ? "shown" : "folded") · "
-            + "query \"\(panel.query)\" · panel \(panel.isVisible ? "open" : "hidden") · "
-            + "Quick Look \(panel.isPreviewing ? "open" : "closed")"
-            + (copied.map { " · pasteboard: \($0.lastPathComponent)" } ?? "")
-    }
-
-    /// The search window's state, for key tests.
-    private static func windowState(_ app: AppController) -> String {
-        let search = app.searchWindow.search
-        let rows = search.rows
-        let index = rows.firstIndex { $0.id == search.selectedRow?.id }.map { "\($0 + 1)" } ?? "-"
-        let previewing = QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared().isVisible
-        return "cell \(index) of \(rows.count) (\(search.selectedRow?.name ?? "none")) · columns \(search.columns) · "
-            + "filter \(search.filter?.title ?? "All") · query \"\(search.query)\" · "
-            + "Quick Look \(previewing ? "open" : "closed")"
-    }
-
-    /// Selects the field's text (⌘A) and types `queries[0]` a key at a time, waits for its final results, then the rest.
-    private static func type(_ queries: [String], in panel: SearchPanelController, every interval: Double,
-                             then done: @escaping () -> Void) {
-        guard let query = queries.first else { return done() }
-        var events: [NSEvent] = []
-        if let selectAll = characterEvent("a", modifiers: .command, window: panel.windowNumber) { events.append(selectAll) }
-        events += query.compactMap { characterEvent(String($0), modifiers: [], window: panel.windowNumber) }
-        panel.onFinalResults = {
-            guard panel.query == query else { return }
-            panel.onFinalResults = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                type(Array(queries.dropFirst()), in: panel, every: interval, then: done)
-            }
-        }
-        for (index, event) in events.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(index)) {
-                NSApp.postEvent(event, atStart: false)
-            }
-        }
-    }
-
-    /// -debugCompose YES: the calls a Korean input method makes while 사업자 is typed on the 2-Set keyboard (the syllable
-    /// in progress is marked text, committed when the next one starts), one key every 0.25 s while results come in.
-    /// Logs what the field ended with and how many keys found the composition cut short.
-    private static func compose(in panel: SearchPanelController, then done: @escaping () -> Void) {
-        guard UserDefaults.standard.bool(forKey: "debugCompose") else { return done() }
-        guard let editor = panel.field?.currentEditor() as? NSTextView else {
-            log("debug: compose: the field isn't being edited")
-            return done()
-        }
-        editor.selectAll(nil)
-        editor.delete(nil)
-        // Each key: what it commits (the finished syllable), then the new marked text.
-        let keys: [(commit: String, marked: String)] = [("", "ㅅ"), ("", "사"), ("", "상"), ("사", "어"), ("", "업"),
-                                                          ("업", "ㅈ"), ("", "자")]
-        let nowhere = NSRange(location: NSNotFound, length: 0)
-        var cut = 0
-        func press(_ index: Int) {
-            guard index < keys.count else {
-                log("debug: composed 사업자: the field says \"\(panel.field?.stringValue ?? "")\" (still marked: "
-                    + "\(editor.hasMarkedText())); the composition was cut short before \(cut) of \(keys.count - 1) keys")
-                return done()
-            }
-            if index > 0, !editor.hasMarkedText() { cut += 1 }
-            let key = keys[index]
-            if !key.commit.isEmpty { editor.insertText(key.commit, replacementRange: nowhere) }
-            editor.setMarkedText(key.marked, selectedRange: NSRange(location: (key.marked as NSString).length, length: 0),
-                                 replacementRange: nowhere)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { press(index + 1) }
-        }
-        press(0)
-    }
-
-    private static func characterEvent(_ character: String, modifiers: NSEvent.ModifierFlags, window: Int) -> NSEvent? {
-        let code: UInt16 = character == " " ? 49 : letterCodes[character.lowercased()] ?? 0
-        return NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
-                                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window, context: nil,
-                                characters: character, charactersIgnoringModifiers: character, isARepeat: false,
-                                keyCode: code)
-    }
-
-    private static func keyEvent(_ name: String, window: Int) -> NSEvent? {
-        let table: [String: (UInt16, String, NSEvent.ModifierFlags)] = [
-            "down": (125, "\u{F701}", []), "up": (126, "\u{F700}", []), "space": (49, " ", []),
-            "esc": (53, "\u{1B}", []), "return": (36, "\r", []), "cmd+c": (8, "c", .command),
-            "cmd+y": (16, "y", .command), "left": (123, "\u{F702}", []), "right": (124, "\u{F703}", []),
-            "cmd+1": (18, "1", .command), "cmd+2": (19, "2", .command), "cmd+o": (31, "o", .command),
-            "cmd+comma": (43, ",", .command),
-        ]
-        var entry = table[name]
-        if entry == nil, name.count == 1, let code = letterCodes[name] { entry = (code, name, []) }
-        guard let (code, characters, flags) = entry else { return nil }
-        return NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
-                                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window, context: nil,
-                                characters: characters, charactersIgnoringModifiers: characters, isARepeat: false,
-                                keyCode: code)
-    }
-
-    private static let letterCodes: [String: UInt16] = [
-        "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "b": 11, "q": 12, "w": 13,
-        "e": 14, "r": 15, "y": 16, "t": 17, "o": 31, "u": 32, "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "n": 45,
-        "m": 46,
-    ]
 
     /// The menu's header view, as it would show if the menu opened now.
     private static func drawMenuHeader(_ app: AppController, to url: URL) {
@@ -715,23 +442,25 @@ enum DebugHooks {
         save("menu header", { try Snapshot.write(window, to: $0, cornerRadius: 6) }, to: url)
     }
 
-    /// The menubar icon idle, at a few progress values, paused, and with an update waiting, scaled up, black on white
-    /// (as a template it takes the bar's color).
+    /// The menubar icon idle, at a few progress values and paused, black on white (as a template it takes the bar's
+    /// color): scaled up 4×, and under it at the bar's own 2× and 1× pixels.
     private static func drawIcons(to url: URL) {
-        let states: [(Double?, Bool, Bool)] = [(nil, false, false), (0.0, false, false), (0.42, false, false),
-                                               (0.9, false, false), (nil, true, false), (nil, false, true),
-                                               (0.42, false, true)]
+        let states: [(Double?, Bool)] = [(nil, false), (0.0, false), (0.42, false), (0.9, false), (nil, true)]
         let scale: CGFloat = 4, side: CGFloat = 18
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(side * scale) * states.count,
-                                   pixelsHigh: Int(side * scale), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
-                                   isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+                                   pixelsHigh: Int(side * (scale + 3)), bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+                                   bitsPerPixel: 0)!
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         NSColor.white.setFill()
         NSRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh).fill()
-        for (index, (progress, paused, update)) in states.enumerated() {
-            StatusIcon.image(progress: progress, paused: paused, update: update)
-                .draw(in: NSRect(x: CGFloat(index) * side * scale, y: 0, width: side * scale, height: side * scale))
+        for (index, (progress, paused)) in states.enumerated() {
+            let image = StatusIcon.image(progress: progress, paused: paused)
+            let x = CGFloat(index) * side * scale
+            image.draw(in: NSRect(x: x, y: side * 3, width: side * scale, height: side * scale))
+            image.draw(in: NSRect(x: x, y: side, width: side * 2, height: side * 2))
+            image.draw(in: NSRect(x: x + side * 2, y: 0, width: side, height: side))
         }
         NSGraphicsContext.restoreGraphicsState()
         try? rep.representation(using: .png, properties: [:])?.write(to: url)

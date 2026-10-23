@@ -23,14 +23,5 @@ extension Vectors {
             scores[row] = sum.sum()
         }
     }
-
-    /// `sums[j]` += Σᵢ `weights[i]` × row `i`'s `j`th float: the rows, weighted and added up (the code map's PCA).
-    static func addWeighted(_ rows: UnsafePointer<Float>, count: Int, weights: UnsafePointer<Float>,
-                            into sums: UnsafeMutablePointer<Float>) {
-        for row in 0..<count {
-            let weight = weights[row], start = rows + row * dimension
-            for j in 0..<dimension { sums[j] += weight * start[j] }
-        }
-    }
 }
 #endif

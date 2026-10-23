@@ -1,0 +1,6 @@
+root = Answer("requests elige el adaptador; urllib3 elige el pool y envía.", [m1, n1])
+a1 = Match("r7", "r6", "probable", "eligen a quién pasarla")
+a2 = Match("r2:696-708", "r3:782-795", "segura", "envían; requests delega")
+a3 = Match("r1:784", "", "segura", "urllib3 no tiene sesiones")
+m1 = Matches("requests frente a urllib3", [a1, a2, a3])
+n1 = Next(["¿Cómo elige urllib3 el pool?", "¿Quién guarda las conexiones abiertas?"])

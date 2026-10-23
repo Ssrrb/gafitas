@@ -53,23 +53,17 @@ let portableTargets: [Target] = [
 
 #if os(macOS)
 let appProducts: [Product] = [.executable(name: "DigUpApp", targets: ["DigUpApp"])]
-let appDependencies: [Package.Dependency] = [
-    // In-app updates (the app only). build.sh embeds the framework in Contents/Frameworks and signs it.
-    .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
-]
 let appTargets: [Target] = [
     // The menubar + hotkey app. build.sh wraps it into build.noindex/DigUp.app. (The product can't be called
     // "DigUp": on a case-insensitive disk it would collide with the `digup` CLI binary.)
     .executableTarget(
         name: "DigUpApp",
-        dependencies: ["DigUpKit", .product(name: "Sparkle", package: "Sparkle")],
-        swiftSettings: [.defaultIsolation(MainActor.self)],
-        linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
+        dependencies: ["DigUpKit"],
+        swiftSettings: [.defaultIsolation(MainActor.self)]
     ),
 ]
 #else
 let appProducts: [Product] = []
-let appDependencies: [Package.Dependency] = []
 let appTargets: [Target] = []
 #endif
 
@@ -80,7 +74,6 @@ let package = Package(
         .executable(name: "digup", targets: ["digup"]),
         .library(name: "DigUpKit", targets: ["DigUpKit"]),
     ] + appProducts,
-    dependencies: appDependencies,
     targets: portableTargets + [
         // The engine: crawler, extractors, index store, the embedder interface and worker client, search. No UI.
         // Platform/ holds what differs by OS (Apple's frameworks on macOS, the C libraries above elsewhere).

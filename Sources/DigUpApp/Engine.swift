@@ -30,7 +30,7 @@ nonisolated struct EngineStatus: Sendable, Equatable {
     var unfinished = 0   // long files with pages or chunks still to read (the backfill's rules hold them up too)
     var vectors = 0
     var paused = false
-    var waitingFor: String?   // why the backfill waits ("on battery"), if it does
+    var waitingFor: String?   // why the backfill waits ("Sin cargador"), if it does
     /// Outside the set hours ("Index only at set hours"): when indexing may run again (`IndexSchedule`).
     var heldUntil: Date?
     /// The helper found no model yet (it's downloading): files are found and named, nothing gets embedded.
@@ -215,7 +215,7 @@ nonisolated final class Engine: @unchecked Sendable {
     func start() {
         searchQueue.async { [self] in
             guard openSearcher() else {
-                update { $0.activity = .failed("Can't open the index") }
+                update { $0.activity = .failed("No se puede abrir el índice") }
                 return
             }
             indexQueue.async { [self] in startHelper() }
@@ -539,7 +539,7 @@ nonisolated final class Engine: @unchecked Sendable {
             try process.run()
         } catch {
             log("indexer: can't start \(process.executableURL?.path ?? "the helper"): \(error)")
-            update { $0.activity = .failed("Can't start indexing") }
+            update { $0.activity = .failed("No se puede empezar a leer") }
             return
         }
         helper = process
@@ -656,7 +656,7 @@ nonisolated final class Engine: @unchecked Sendable {
         case "error":
             log("indexer: \(event["message"] as? String ?? "error")")
             update {
-                if event["fatal"] as? Bool == true { $0.activity = .failed("Indexing stopped") }
+                if event["fatal"] as? Bool == true { $0.activity = .failed("La lectura se detuvo") }
                 else if case .syncing = $0.activity { $0.activity = .idle }
             }
         default:
@@ -700,7 +700,7 @@ nonisolated final class Engine: @unchecked Sendable {
             log("indexer: the model changed, the code index starts over")
         case "error":
             log("indexer: code: \(event["message"] as? String ?? "error")")
-            if event["fatal"] as? Bool == true { update { $0.activity = .failed("Indexing stopped") } }
+            if event["fatal"] as? Bool == true { update { $0.activity = .failed("La lectura se detuvo") } }
         default:
             break
         }
@@ -878,20 +878,6 @@ nonisolated final class Engine: @unchecked Sendable {
                     FolderSelection.isSearched(hit.path, folders: roots, skipped: skipped)
                         && FileManager.default.fileExists(atPath: hit.path)
                 })
-            }
-        }
-    }
-
-    /// The code index's map (`Searcher.map`) with each file's path, for the Ask window; nil without code vectors.
-    func codeMap() async -> (map: CodeMap, paths: [Int64: String])? {
-        await withCheckedContinuation { continuation in
-            searchQueue.async { [self] in
-                let started = Date()
-                let roots = lock.withLock { codeRoots.map(\.path) }
-                guard let codeSearcher, let map = try? codeSearcher.map(),
-                      let files = try? codeStore?.files(under: roots) else { return continuation.resume(returning: nil) }
-                log("engine: code map of \(map.x.count) vectors in \(ms(since: started))")
-                continuation.resume(returning: (map, Dictionary(files.map { ($0.id, $0.path) }) { first, _ in first }))
             }
         }
     }

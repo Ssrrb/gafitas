@@ -1,31 +1,34 @@
 import AppKit
 import DigUpKit
 import Observation
-import Quartz
 import SwiftUI
 
-/// The Ask window: a question about your code, the places in your projects that answer it (dug up as you type, on
-/// this Mac), and the answer drawn as a figure. The Dock icon shows while it's open, and closing it frees its views.
+/// The Ask window: a question about your code, and the answer drawn as the pieces of code that fit together. Every
+/// question is a chat, kept in the history on the left; the places in your projects that answer it are dug up as you
+/// type, on this Mac. The Dock icon shows while it's open, and closing it frees its views.
 final class AskWindowController: NSObject, NSWindowDelegate {
     let ask: AskModel
     private unowned let app: AppController
-    private var window: QuickLookWindow?
+    private var window: NSWindow?
     private var keyMonitor: Any?
-    private var mouseMonitor: Any?
 
     init(app: AppController) {
         self.app = app
-        ask = AskModel(engine: app.engine, model: app.model)
+        ask = AskModel(engine: app.engine, model: app.model, chatLog: app.chatLog)
     }
 
     var isVisible: Bool { window?.isVisible == true }
 
     func show(question: String? = nil) {
         let window = self.window ?? makeWindow()
-        if let question { ask.question = question }
+        if let question, !ask.working {
+            ask.newQuestion()
+            ask.question = question
+        }
         ask.loadProjects()
+        ask.refreshHistory()
         app.present(window)
-        if !AppController.offscreen { window.makeFirstResponder(ask.field) }
+        if !AppController.offscreen { ask.focusField() }
         installKeyMonitor()
     }
 
@@ -33,16 +36,16 @@ final class AskWindowController: NSObject, NSWindowDelegate {
         window?.close()
     }
 
-    private func makeWindow() -> QuickLookWindow {
-        let window = QuickLookWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 780),
-                                     styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-                                     backing: .buffered, defer: false)
-        // As the search window: an empty unified toolbar makes the title bar tall enough for the question field.
+    private func makeWindow() -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 780),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                              backing: .buffered, defer: false)
+        // An empty unified toolbar makes the title bar as tall as the top bar.
         window.toolbar = NSToolbar(identifier: "GafitasAsk")
         window.toolbarStyle = .unified
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.title = "Ask"
+        window.title = "Gafitas"
         window.minSize = NSSize(width: 980, height: 620)
         window.isReleasedWhenClosed = false
         window.delegate = self
@@ -50,15 +53,17 @@ final class AskWindowController: NSObject, NSWindowDelegate {
             window.setFrameAutosaveName("GafitasAskWindow")
         }
         window.contentView = NSHostingView(rootView: AskWindowView(ask: ask, model: app.model, app: app))
+        // For snapshots at the smallest size: -debugWindowSize 980x620 (after the content, which sizes the window).
+        if let size = UserDefaults.standard.string(forKey: "debugWindowSize")?.split(separator: "x").compactMap({ Double($0) }),
+           size.count == 2 {
+            window.setContentSize(NSSize(width: size[0], height: size[1]))
+        }
         if window.frame.origin == .zero { window.center() }
         self.window = window
         return window
     }
 
     func windowWillClose(_ notification: Notification) {
-        if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared().isVisible {
-            QLPreviewPanel.shared().orderOut(nil)
-        }
         removeKeyMonitor()
         ask.closeAgent()
         window?.contentView = nil
@@ -74,12 +79,17 @@ final class AskWindowController: NSObject, NSWindowDelegate {
 
     /// The answer page as WebKit draws it, for `snapshot` (`-debugAskAnswer`).
     var answerShot: NSImage?
+    /// The whole page, below the fold too.
+    var pageShot: NSImage?
 
     func captureAnswer(then done: @escaping () -> Void) {
         ask.bridge.webView.takeSnapshot(with: nil) { [weak self] image, error in
             if let error { log("ask: answer snapshot failed: \(error)") }
             self?.answerShot = image
-            done()
+            self?.ask.bridge.capturePage { page in
+                self?.pageShot = page
+                done()
+            }
         }
     }
 
@@ -88,107 +98,54 @@ final class AskWindowController: NSObject, NSWindowDelegate {
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let window else { return event }
-            let previewing = QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared().isVisible
-                && event.window === QLPreviewPanel.shared() && QLPreviewPanel.shared().dataSource === window
-            guard event.window === window || previewing else { return event }
+            guard let self, let window, event.window === window else { return event }
             return handle(event) ? nil : event
-        }
-        // A click in the question field: the arrows and Space are the text's again.
-        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            guard let self, let window, event.window === window, let field = ask.field else { return event }
-            if field.bounds.contains(field.convert(event.locationInWindow, from: nil)) { ask.editing() }
-            return event
         }
     }
 
     private func removeKeyMonitor() {
-        for monitor in [keyMonitor, mouseMonitor].compactMap({ $0 }) { NSEvent.removeMonitor(monitor) }
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
-        mouseMonitor = nil
     }
 
-    /// ↑ ↓ move through the places (and from then on ↩ opens, ⌫ ignores, Space previews); ↩ in the field asks;
-    /// ⌘↩ reveals, ⌘C copies the file, ⇧⌘C its lines, ⌘Z brings back what was ignored, ⌘L goes to the question.
+    /// ↩ asks (in the question field) or follows up (in the composer); ⌘. and Esc stop; ⌘L goes to the field; ⌘[ ⌘]
+    /// move through the history; ⌘⌫ deletes the chat when no text is being edited. The menus have the rest.
     private func handle(_ event: NSEvent) -> Bool {
-        if (ask.field?.currentEditor() as? NSTextView)?.hasMarkedText() == true { return false }
+        let editor = window?.firstResponder as? NSTextView
+        if editor?.hasMarkedText() == true { return false }
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             .subtracting([.capsLock, .numericPad, .function])
-        let previewing = QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared().isVisible
-        let row = ask.selectedRow
-        switch event.keyCode {
-        case 125, 126 where modifiers.isEmpty:   // ↓ ↑
-            ask.move(by: event.keyCode == 125 ? 1 : -1)
-        case 36, 76 where modifiers == .option && ask.navigated:   // ⌥↩
-            guard let row else { return false }
-            ask.adapt(row)
-        case 36, 76 where event.window?.firstResponder === ask.followUpField?.currentEditor():   // ↩ in the follow-up
-            ask.sendFollowUp()
-        case 36, 76:   // ↩
-            if modifiers == .command, let row {
-                NSWorkspace.shared.activateFileViewerSelecting([row.url])
-            } else if modifiers.isEmpty, ask.navigated, let row {
-                ask.reuse(row)
-            } else if modifiers.isEmpty {
+        switch (event.keyCode, modifiers) {
+        case (36, []), (76, []):   // ↩
+            if let editor, editor === ask.followUpField?.currentEditor() {
+                ask.sendFollowUp()
+            } else if let editor, editor === ask.field?.currentEditor() {
                 ask.askNow()
             } else {
                 return false
             }
-        case 51 where modifiers.isEmpty && ask.navigated:   // ⌫
-            guard let row else { return false }
-            ask.ignore(row)
-        case 6 where modifiers == .command && !ask.ignored.isEmpty && ask.navigated:   // ⌘Z
-            ask.undoIgnore()
-        case 49 where modifiers.isEmpty && (ask.navigated || previewing) && row != nil:   // Space
-            toggleQuickLook()
-        case 16 where modifiers == .command:   // ⌘Y
-            toggleQuickLook()
-        case 18, 19 where modifiers == .command:   // ⌘1 answer, ⌘2 map
-            ask.tab = event.keyCode == 18 ? .answer : .map
-        case 38 where modifiers == .command:   // ⌘J
-            ask.followUpField?.window?.makeFirstResponder(ask.followUpField)
-        case 47 where modifiers == .command && ask.answer == .working:   // ⌘.
+        case (47, .command):   // ⌘.
+            guard ask.working else { return false }
             ask.stop()
-        case 37 where modifiers == .command:   // ⌘L
-            ask.editing()
-            ask.focusField()
-        case 8 where modifiers == .command && ask.navigated:   // ⌘C
-            guard let row else { return false }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([row.url as NSURL])
-        case 8 where modifiers == [.command, .shift]:   // ⇧⌘C
-            guard let row else { return false }
-            ask.copyLines(row)
-        case 53:   // Esc
-            if previewing {
-                QLPreviewPanel.shared().orderOut(nil)
-            } else if ask.answer == .working {
+        case (53, []):   // Esc
+            if ask.working {
                 ask.stop()
-            } else if !ask.question.isEmpty {
+            } else if ask.chat == nil, !ask.question.isEmpty {
                 ask.question = ""
             } else {
                 return false
             }
+        case (37, .command):   // ⌘L
+            ask.focusField()
+        case (33, .command), (30, .command):   // ⌘[ ⌘]
+            ask.stepChat(by: event.keyCode == 33 ? -1 : 1)
+        case (51, .command) where editor == nil:   // ⌘⌫
+            guard let chat = ask.chat else { return false }
+            ask.confirmDelete(chat.id)
         default:
             return false
         }
-        if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared().isVisible { updateQuickLook() }
         return true
-    }
-
-    private func toggleQuickLook() {
-        let panel = QLPreviewPanel.shared()!
-        if QLPreviewPanel.sharedPreviewPanelExists(), panel.isVisible {
-            panel.orderOut(nil)
-        } else if ask.selectedRow != nil {
-            updateQuickLook()
-            panel.makeKeyAndOrderFront(nil)
-        }
-    }
-
-    private func updateQuickLook() {
-        window?.previewURL = ask.selectedRow?.url
-        QLPreviewPanel.shared().reloadData()
     }
 }
 
@@ -200,52 +157,6 @@ struct Project: Identifiable, Equatable {
     let index: Int
     var id: String { path }
     var name: String { (path as NSString).lastPathComponent }
-}
-
-enum AskTab: Hashable {
-    case answer, map
-}
-
-/// The code map, ready to draw: each vector's dot from 0 to 1 across the sheet, its file and its folder's tint.
-struct MapData {
-    struct Dot {
-        let x: CGFloat
-        let y: CGFloat
-        let segment: Int64
-        let path: String
-        let tint: Int
-    }
-
-    let code: CodeMap
-    let dots: [Dot]
-    private let minimum: (x: Float, y: Float)
-    private let span: (x: Float, y: Float)
-
-    init(_ code: CodeMap, paths: [Int64: String], projects: [Project]) {
-        self.code = code
-        // The middle 98% of each axis fills the sheet: one far-off stretch shouldn't squeeze the rest into a corner.
-        func range(_ values: [Float]) -> (Float, Float) {
-            let sorted = values.sorted()
-            guard !sorted.isEmpty else { return (0, 1) }
-            let low = sorted[Int(Double(sorted.count - 1) * 0.01)], high = sorted[Int(Double(sorted.count - 1) * 0.99)]
-            return (low, max(high - low, 1e-6))
-        }
-        let (x0, xs) = range(code.x), (y0, ys) = range(code.y)
-        minimum = (x0, y0)
-        span = (xs, ys)
-        dots = code.x.indices.map { index in
-            let path = paths[code.files[index]] ?? ""
-            let tint = projects.filter { path.hasPrefix($0.path + "/") }.max { $0.path.count < $1.path.count }?.index ?? 99
-            return Dot(x: CGFloat(min(max((code.x[index] - x0) / xs, 0), 1)),
-                       y: CGFloat(min(max((code.y[index] - y0) / ys, 0), 1)),
-                       segment: code.segments[index], path: path, tint: tint)
-        }
-    }
-
-    func normalized(_ point: (x: Float, y: Float)) -> CGPoint {
-        CGPoint(x: CGFloat(min(max((point.x - minimum.x) / span.x, 0), 1)),
-                y: CGFloat(min(max((point.y - minimum.y) / span.y, 0), 1)))
-    }
 }
 
 /// Where the answer is.
@@ -266,16 +177,8 @@ struct AgentModel: Equatable {
     let local: Bool
 }
 
-/// The places found in one repo, under its name.
-struct PlaceGroup: Identifiable {
-    let name: String
-    let project: Project?
-    let rows: [ResultRow]
-    var id: String { name }
-}
-
-/// The Ask window's state: the question, the places dug up for it (a pause in typing digs again, on this Mac), which
-/// are set aside, and which is selected.
+/// The Ask window's state: the question on the home screen and the places dug up for it (a pause in typing digs
+/// again, on this Mac), the chat on the sheet, the history, and what Pi is doing for the turn it's answering.
 @Observable
 final class AskModel {
     var question = "" {
@@ -286,98 +189,110 @@ final class AskModel {
         didSet { if leftOut != oldValue { dig() } }
     }
     private(set) var projects: [Project] = []
-    /// The places dug up for the question, best first, minus the ignored ones.
+    /// The places dug up for the question, best first.
     private(set) var places: [ResultRow] = []
     /// Each place's first line that defines something, by its id, read after the places arrive.
     private(set) var summaries: [String: String] = [:]
-    /// Set aside with Ignore (⌫), newest last: ⌘Z brings the last one back.
-    private(set) var ignored: [ResultRow] = []
     /// The places are for the question as it is now.
     private(set) var dug = false
-    var selection: String? {
-        didSet { if selection != oldValue { bridge.select(selection.flatMap { refIDs[$0] }) } }
-    }
-    /// You moved through the places with the arrow keys since the last edit: ↩, ⌫ and Space act on them then.
-    private(set) var navigated = false
 
-    /// The sheet shows the answer, or the map of the code (⌘1, ⌘2).
-    var tab = AskTab.answer {
-        didSet { if tab == .map, map == nil { loadMap() } }
-    }
-    private(set) var map: MapData?
-    /// The question's vector, for its place on the map.
-    private(set) var questionVector: [Float]?
-
-    // The answer.
+    /// The chat on the sheet; nil on the home screen.
+    private(set) var chat: Chat?
+    private(set) var history: [ChatSummary] = []
+    var historyQuery = ""
+    var sidebarShown = true
     private(set) var answer = AnswerPhase.idle
-    /// What Pi is doing, in a line: "Reading tools/registry.py…", "Answered by DeepSeek V4.1 Flash in 41 s".
-    private(set) var progress = ""
     /// The model Pi answers with, once Pi has said.
     private(set) var agentModel: AgentModel?
-    /// The question the answer on the sheet is for.
-    private(set) var answered = ""
     var followUp = ""
-    /// The figure part under the pointer cites this place: its card shows it.
-    private(set) var hovered: String?
     /// Waiting for Continue on the privacy sheet: the provider it would go to.
     var confirming: String?
+    /// The question being answered (a new chat's title before it's saved).
+    private(set) var asking = ""
 
     @ObservationIgnored weak var field: NSTextField?
     @ObservationIgnored weak var followUpField: NSTextField?
+    @ObservationIgnored weak var historyField: NSTextField?
     @ObservationIgnored let bridge = AnswerBridge()
     @ObservationIgnored private let agent = AgentRunner()
     @ObservationIgnored private let engine: Engine
     @ObservationIgnored private let model: AppModel
+    @ObservationIgnored private let chatLog: ChatLog
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var task: Task<Void, Never>?
     /// The places the answer may cite, by ref id ("r3", "d1"): what the page draws and what a click may open.
     @ObservationIgnored private var refs: [String: [String: Any]] = [:]
-    /// A place's ref id, by its row id.
-    @ObservationIgnored private var refIDs: [String: String] = [:]
     @ObservationIgnored private var answerWhenDug = false
     @ObservationIgnored private var pending: String?
+    /// The chat whose conversation Pi's session holds: a follow-up there goes straight on; anywhere else it starts a
+    /// session that's told the chat so far.
+    @ObservationIgnored private var sessionChat: String?
+
+    // The turn being answered.
+    @ObservationIgnored private var turnID = ""
+    @ObservationIgnored private var turnQuestion = ""
+    /// The block the turn's question was picked in, if it was.
+    @ObservationIgnored private var turnVia: ChatTurn.Via?
+    @ObservationIgnored private var trail: [[String: Any]] = []
+    @ObservationIgnored private var trailSummary: String?
+    @ObservationIgnored private var thinking = ""
+    @ObservationIgnored private var narration = ""
+    @ObservationIgnored private var thoughtShownAt = Date.distantPast
+    @ObservationIgnored private var filesRead = 0
     @ObservationIgnored private var repairing = false
     @ObservationIgnored private var repaired = false
+    @ObservationIgnored private var stopped = false
     @ObservationIgnored private var repair = ""
     @ObservationIgnored private var drawing = false
     @ObservationIgnored private var started = Date()
-    /// The program as it streamed, for the log (`-debugAskAnswer`).
-    @ObservationIgnored private var debugProgram = ""
+    @ObservationIgnored private var announcedAt = Date.distantPast
+    /// The program as it streamed (what's saved if the page never reports the repaired one).
+    @ObservationIgnored private var streamed = ""
 
-    /// At most this many places: what fits the column, and what an answer can cite.
+    /// At most this many places: what an answer can cite.
     static let placeLimit = 15
     /// A question can be about two projects at once, and then neither side stands out at the usual 2
     /// (evals/prior-art.json: two-project questions 3 of 6 in the top 5 at 2.0, 5 of 6 at 1.5).
     static let zGate = 1.5
+    static let es = Locale(identifier: "es")
 
-    init(engine: Engine, model: AppModel) {
+    init(engine: Engine, model: AppModel, chatLog: ChatLog) {
         self.engine = engine
         self.model = model
+        self.chatLog = chatLog
         agent.onEvent = { [weak self] in self?.received($0) }
         bridge.onMessage = { [weak self] in self?.page($0) }
     }
 
     var trimmed: String { question.trimmingCharacters(in: .whitespacesAndNewlines) }
-    var selectedRow: ResultRow? { places.first { $0.id == selection } ?? places.first }
+    var working: Bool { answer == .working }
 
-    /// The places, one group per repo in the order of its best place.
-    var groups: [PlaceGroup] {
-        var order: [String] = []
-        var byName: [String: [ResultRow]] = [:]
-        for row in places {
-            let name = repoName(row)
-            if byName[name] == nil { order.append(name) }
-            byName[name, default: []].append(row)
+    /// "8 lugares en requests y urllib3".
+    var placesLine: String {
+        let repos = orderedRepos(places)
+        return repos.isEmpty ? placesCount(places.count) : "\(placesCount(places.count)) en \(Self.list(repos))"
+    }
+
+    /// History rows matching the search field (questions and project names).
+    var shownHistory: [ChatSummary] {
+        let query = historyQuery.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return history }
+        return history.filter { summary in
+            ([summary.title] + summary.projects).contains {
+                $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }
         }
-        return order.map { PlaceGroup(name: $0, project: project(of: byName[$0]![0]), rows: byName[$0]!) }
     }
 
-    /// "15 places in 2 projects".
-    var summary: String {
-        let repos = Set(places.map(repoName)).count
-        return (places.count == 1 ? "1 place" : "\(places.count) places")
-            + " in " + (repos == 1 ? "1 project" : "\(repos) projects")
+    /// What the privacy sheet says goes to the model: the places, their lines, their projects.
+    var sending: (places: Int, lines: Int, repos: [String]) {
+        let lines = refs.values.reduce(0) { $0 + (($1["last"] as? Int ?? 0) - ($1["first"] as? Int ?? 0) + 1) }
+        return (refs.count, lines, chat?.projects ?? [])
     }
+
+    static func list(_ items: [String]) -> String { items.formatted(.list(type: .and).locale(es)) }
+
+    private func placesCount(_ count: Int) -> String { count == 1 ? "1 lugar" : "\(count) lugares" }
 
     /// The code folder a place is in.
     func project(of row: ResultRow) -> Project? {
@@ -389,12 +304,23 @@ final class AskModel {
         row.info["repo"].map { ($0 as NSString).lastPathComponent } ?? project(of: row)?.name ?? row.folder
     }
 
+    private func orderedRepos(_ rows: [ResultRow]) -> [String] {
+        var seen: [String] = []
+        for row in rows where !seen.contains(repoName(row)) { seen.append(repoName(row)) }
+        return seen
+    }
+
     /// Its path inside its repo: "tools/registry.py".
     func pathInRepo(_ row: ResultRow) -> String {
         if let repo = row.info["repo"], row.url.path.hasPrefix(repo + "/") {
             return String(row.url.path.dropFirst(repo.count + 1))
         }
         return row.name
+    }
+
+    /// A project's tint by its name, for the history's dots.
+    func tint(ofRepo name: String) -> Color {
+        Brand.projectTint(projects.first { $0.name == name }?.index ?? 99)
     }
 
     func loadProjects() {
@@ -404,100 +330,96 @@ final class AskModel {
         }
     }
 
-    func loadMap() {
-        Task {
-            guard let (code, paths) = await engine.codeMap() else { return }
-            map = MapData(code, paths: paths, projects: projects)
-        }
-    }
-
-    /// Where the question lands on the map, once it's dug up.
-    var questionPlace: CGPoint? {
-        guard let map, let questionVector, !trimmed.isEmpty else { return nil }
-        return map.normalized(map.code.place(questionVector))
-    }
-
     func toggle(_ project: Project) {
         if leftOut.contains(project.path) { leftOut.remove(project.path) } else { leftOut.insert(project.path) }
     }
 
-    func select(_ row: ResultRow) {
-        selection = row.id
-        navigated = true
-    }
-
-    func editing() {
-        navigated = false
-    }
-
     func focusField() {
-        guard let field, field.currentEditor() == nil else { return }
-        field.window?.makeFirstResponder(field)
+        let target = chat == nil ? field : followUpField
+        guard let target, target.currentEditor() == nil else { return }
+        target.window?.makeFirstResponder(target)
     }
 
-    func move(by step: Int) {
-        let ids = places.map(\.id)
-        guard !ids.isEmpty else { return }
-        let index = selection.flatMap { ids.firstIndex(of: $0) } ?? -1
-        selection = ids[max(0, min(ids.count - 1, index + step))]
-        navigated = true
-    }
-
-    /// Reuse: the code in your editor, at the line.
-    func reuse(_ row: ResultRow) {
-        engine.open(row)
-    }
-
-    func ignore(_ row: ResultRow) {
-        guard let index = places.firstIndex(where: { $0.id == row.id }) else { return }
-        if let id = refIDs[row.id] { agent.steer("Set aside \(id): the user says it doesn't fit.") }
-        places.remove(at: index)
-        ignored.append(row)
-        if selection == row.id { selection = places[safe: min(index, places.count - 1)]?.id }
-    }
-
-    func undoIgnore() {
-        guard let row = ignored.popLast() else { return }
-        places.append(row)
-        places.sort { ($0.z ?? 0) > ($1.z ?? 0) }
-        selection = row.id
-    }
-
-    /// The place's lines, headed by where they're from, for pasting into a chat or a note.
-    func copyLines(_ row: ResultRow) {
-        Task {
-            guard let text = await engine.text(ofSegment: row.segmentID, code: true) else { return }
-            let place = "\(repoName(row))/\(pathInRepo(row)):\(Int(row.loc ?? 1))"
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString("// \(place)\n\(text)", forType: .string)
+    func focusHistorySearch() {
+        sidebarShown = true
+        DispatchQueue.main.async { [weak self] in
+            guard let field = self?.historyField else { return }
+            field.window?.makeFirstResponder(field)
         }
     }
 
-    /// A repo's notes (README, docs) rather than its code.
-    private static func isDoc(_ row: ResultRow) -> Bool {
-        Rules.codeTextExtensions.contains(row.url.pathExtension.lowercased())
+    // MARK: Chats
+
+    func refreshHistory() {
+        history = chatLog.list()
     }
 
-    /// A place in a line: what it defines, or, when it starts in the middle of something, what it's in ("in
-    /// HTTPAdapter.send", "in def send(…" when there's no class), from the file around it.
-    private static func summary(_ text: String, of row: ResultRow) async -> String {
-        let own = CodeExtractor.summary(text)
-        guard !CodeExtractor.defines(own), row.segment == .lines, let first = row.loc else { return own }
-        return await Task.detached {
-            guard let file = try? String(contentsOf: row.url, encoding: .utf8),
-                  let outer = CodeExtractor.enclosing(file, line: Int(first)) else { return own }
-            if let name = CodeExtractor.name(definedBy: outer.text),
-               let owner = CodeExtractor.enclosing(file, line: outer.line, within: 5000)
-                   .flatMap({ CodeExtractor.name(definedBy: $0.text) }) {
-                return "in \(owner).\(name)"
-            }
-            return "in " + outer.text
-        }.value
+    /// ⌘N: back to the home screen. Not while Pi answers: it runs one conversation at a time.
+    func newQuestion() {
+        guard !working else { return }
+        chat = nil
+        answer = .idle
+        question = ""
+        followUp = ""
+        refs = [:]
+        bridge.reset()
+        DispatchQueue.main.async { [weak self] in self?.focusField() }
     }
 
-    /// ↩ in the question field: the places at once (without waiting for the typing pause), then the answer.
+    /// A saved chat, drawn from the log at once: no Pi, no model call.
+    func open(chat id: String) {
+        guard !working, chat?.id != id, let saved = chatLog.load(id) else { return }
+        chat = saved
+        refs = Dictionary(saved.refs.compactMap { ref in (ref["id"] as? String).map { ($0, ref) } }) { a, _ in a }
+        answer = saved.turns.last.map { $0.outcome.hasPrefix("failed") ? .failed($0.outcome) : .done } ?? .done
+        followUp = ""
+        bridge.reset()
+        bridge.refs(saved.refs.map(Self.forPage))
+        bridge.load(saved.turns.enumerated().map { index, turn in
+            var saved: [String: Any] = ["id": "t\(index + 1)", "question": turn.question, "program": turn.program,
+                                        "trail": ["lines": turn.trail.map(Self.line), "summary": turn.summary,
+                                                  "thinking": turn.thinking]]
+            if let via = turn.via { saved["via"] = ["turn": via.turn, "block": via.block, "choices": via.choices] }
+            return saved
+        })
+        DispatchQueue.main.async { [weak self] in self?.focusField() }
+    }
+
+    /// ⌘[ ⌘]: the chat above or below in the history.
+    func stepChat(by step: Int) {
+        let list = shownHistory
+        guard !list.isEmpty, !working else { return }
+        let index = chat.flatMap { current in list.firstIndex { $0.id == current.id } } ?? (step > 0 ? -1 : list.count)
+        let next = index + step
+        guard list.indices.contains(next) else { return }
+        open(chat: list[next].id)
+    }
+
+    func confirmDelete(_ id: String) {
+        guard !(working && chat?.id == id) else { return }
+        let questions = history.first { $0.id == id }?.questions ?? chat?.turns.count ?? 1
+        guard Self.deleteAlert(questions: questions).runModal() == .alertFirstButtonReturn else { return }
+        chatLog.delete(id)
+        if chat?.id == id { newQuestion() }
+        refreshHistory()
+    }
+
+    static func deleteAlert(questions: Int) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = "¿Eliminar esta conversación?"
+        alert.informativeText = questions == 1
+            ? "Se borra de este Mac su pregunta y su respuesta. No se puede deshacer."
+            : "Se borran de este Mac sus \(questions) preguntas y respuestas. No se puede deshacer."
+        alert.addButton(withTitle: "Eliminar").hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancelar")
+        return alert
+    }
+
+    // MARK: Asking
+
+    /// ↩ on the home screen: the places at once (without waiting for the typing pause), then the answer.
     func askNow() {
-        guard !trimmed.isEmpty else { return }
+        guard chat == nil, !working, !trimmed.isEmpty else { return }
         if dug || !engine.hasCode {
             startAnswer()
         } else {
@@ -506,26 +428,46 @@ final class AskModel {
         }
     }
 
-    /// Adapt…: a follow-up about making this place fit, ready to send.
-    func adapt(_ row: ResultRow) {
-        let id = refIDs[row.id].map { " (\($0))" } ?? ""
-        followUp = "How would I adapt \(summaries[row.id] ?? row.name)\(id) for this?"
-        followUpField?.window?.makeFirstResponder(followUpField)
-    }
-
+    /// The composer: a follow-up in this chat. In a reopened chat, Pi gets the chat so far first.
     func sendFollowUp() {
         let text = followUp.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, agent.isRunning else { return }
+        guard !text.isEmpty, !working, chat != nil else { return }
         followUp = ""
-        begin(text, fresh: false)
+        ask(text)
+    }
+
+    /// The next question in this chat, typed or picked; `note` tells Pi what the pick was made from. In a reopened
+    /// chat, Pi gets the chat so far first.
+    private func ask(_ text: String, via: ChatTurn.Via? = nil, note: String? = nil) {
+        guard let chat else { return }
+        guard let pi = AgentRunner.locate() else {
+            answer = .needsPi
+            followUp = text
+            return
+        }
+        turnQuestion = text
+        turnVia = via
+        let message = note.map { "\($0)\n\n\(text)" } ?? text
+        if sessionChat == chat.id, agent.isRunning {
+            beginTurn(text)
+            begin(message, fresh: false)
+            return
+        }
+        // A new process, told to number its places after the ones this chat already cites.
+        closeAgent()
+        guard startPi(pi) else { return }
+        beginTurn(text, continuing: true)
+        begin(Self.continuation(chat, question: message), fresh: true)
     }
 
     func stop() {
+        stopped = true
         agent.abort()
     }
 
     func closeAgent() {
         agent.stop()
+        sessionChat = nil
     }
 
     func approve(_ provider: String, always: Bool) {
@@ -540,50 +482,96 @@ final class AskModel {
     func cancelConfirm() {
         confirming = nil
         pending = nil
-        answer = .idle
+        finishTurn(.stopped)
     }
 
     private static var approvedProviders: [String] {
         UserDefaults.standard.stringArray(forKey: "approvedProviders") ?? []
     }
 
-    // MARK: The answer
-
-    /// Pi, the places as refs, and the question: the privacy sheet first when the model isn't on this Mac.
+    /// The first question: a new chat, its places as refs, then Pi.
     private func startAnswer() {
         guard let pi = AgentRunner.locate() else {
             answer = .needsPi
             return
         }
-        answered = trimmed
-        let roots = model.settings.codeRoots.filter { !leftOut.contains($0.path) }
-        do {
-            try agent.start(pi: pi, roots: roots, index: model.settings.indexDirectory,
-                            models: model.settings.modelsDirectory)
-        } catch {
-            answer = .failed("Pi didn't start: \(error.localizedDescription)")
-            return
-        }
+        let places = self.places, asked = trimmed
         answer = .working
-        progress = "Reading the places it found…"
-        let places = self.places, question = trimmed
         Task {
             refs = [:]
-            refIDs = [:]
             var list: [[String: Any]] = []
             for (index, row) in places.enumerated() {
                 let id = "r\(index + 1)"
                 guard let text = await engine.text(ofSegment: row.segmentID, code: true) else { continue }
                 let ref = ref(id: id, row: row, text: text)
                 refs[id] = ref
-                refIDs[row.id] = id
                 list.append(ref)
             }
+            chat = Chat(id: ChatLog.newID(), created: Date(), projects: orderedRepos(places), refs: list, turns: [])
             bridge.reset()
             bridge.refs(list.map(Self.forPage))
-            bridge.select(selection.flatMap { refIDs[$0] })
-            begin(Self.prompt(question, refs: list), fresh: true)
+            question = ""
+            turnQuestion = asked
+            guard startPi(pi) else { return }
+            beginTurn(asked)
+            begin(Self.prompt(asked, refs: list), fresh: true)
         }
+    }
+
+    private func startPi(_ pi: URL) -> Bool {
+        let roots = model.settings.codeRoots.filter { !leftOut.contains($0.path) }
+        // A new process may run another model: `begin` waits for it to say which before sending.
+        agentModel = nil
+        do {
+            let digFrom = refs.keys.compactMap { $0.hasPrefix("d") ? Int($0.dropFirst()) : nil }.max() ?? 0
+            try agent.start(pi: pi, roots: roots, index: model.settings.indexDirectory,
+                            models: model.settings.modelsDirectory, digFrom: digFrom)
+            return true
+        } catch {
+            beginTurn(turnQuestion)
+            finishTurn(.failed("Pi no arrancó: \(error.localizedDescription)"))
+            return false
+        }
+    }
+
+    /// A new turn on the page: its heading, and the trail's first lines.
+    private func beginTurn(_ text: String, continuing: Bool = false) {
+        guard let chat else { return }
+        turnQuestion = text
+        asking = text
+        turnID = "t\(chat.turns.count + 1)"
+        trail = []
+        trailSummary = nil
+        thinking = ""
+        narration = ""
+        filesRead = 0
+        repairing = false
+        repaired = false
+        stopped = false
+        drawing = false
+        streamed = ""
+        started = Date()
+        answer = .working
+        bridge.turn(turnID, question: text, via: turnVia)
+        bridge.busy(true)
+        if continuing {
+            addLine("Retomando la conversación…", running: true)
+        } else if chat.turns.isEmpty {
+            if !refs.isEmpty {
+                addLine("Encontró \(placesCount(refs.count)) en \(Self.list(chat.projects))", places: true)
+            } else if model.hasCode {
+                addLine("No encontró nada cercano en tus proyectos; la respuesta sale de lo que sabe el modelo.")
+            }
+            if let indexing = model.status.code.indexing, indexing.total > 0 {
+                let percent = Int((Double(indexing.done) / Double(indexing.total) * 100).rounded(.down))
+                addLine("Todavía leyendo tu código (\(percent) %): parte aún no está.")
+            }
+            addLine("Preparando a Pi…", running: true)
+        } else {
+            addLine("Pensando la respuesta…", running: true)
+        }
+        announce(trail.last?["text"] as? String ?? "")
+        pushTrail()
     }
 
     /// Sends it once the model is known and allowed: a model off this Mac needs a yes first (once per provider).
@@ -602,17 +590,7 @@ final class AskModel {
     }
 
     private func send(_ prompt: String, fresh: Bool) {
-        if !fresh {
-            // A follow-up's answer is drawn afresh, citing the same places (reset clears the page's table).
-            bridge.reset()
-            bridge.refs(refs.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.compactMap { refs[$0] }
-                .map(Self.forPage))
-        }
-        answer = .working
-        repaired = false
-        repairing = false
-        drawing = false
-        started = Date()
+        sessionChat = chat?.id
         if fresh { agent.ask(prompt) } else { agent.followUp(prompt) }
     }
 
@@ -630,22 +608,122 @@ final class AskModel {
         ref.filter { $0.key != "file" }
     }
 
+    private static func line(_ line: ChatTurn.TrailLine) -> [String: Any] {
+        line.places == true ? ["text": line.text, "places": true] : ["text": line.text]
+    }
+
     /// At most this many lines of each place go to the model and the page.
     static let refLines = 40
 
+    /// The question with its places, in the format the system prompt shows.
     private static func prompt(_ question: String, refs: [[String: Any]]) -> String {
         var text = "Question: \(question)\n\n"
         if refs.isEmpty {
-            text += "Gafitas found no places in the user's projects for this. Answer from what you know, with concept parts.\n"
+            text += "Gafitas found no places in the user's projects for this. Answer from what you know: every piece is an Idea.\n"
         } else {
             text += "Places Gafitas dug up in the user's projects (cite them by id):\n"
             for ref in refs {
-                text += "\n\(ref["id"]!) · \(ref["repo"]!)/\(ref["path"]!), lines \(ref["first"]!)-\(ref["last"]!) "
-                    + "(\(ref["file"]!))\n\(ref["text"]!)\n"
+                text += "\n\(ref["id"]!) · \(ref["repo"]!)/\(ref["path"]!), lines \(ref["first"]!)-\(ref["last"]!)"
+                    + ((ref["summary"] as? String).map { " · \($0)" } ?? "") + "\n\(ref["text"]!)\n"
             }
         }
         return text
     }
+
+    /// A reopened chat goes on in a new session: Pi gets the questions so far and what it answered.
+    private static func continuation(_ chat: Chat, question: String) -> String {
+        let earlier = chat.turns.map { "Question: \($0.question)\nYour answer:\n\($0.program)" }.joined(separator: "\n\n")
+        return "This continues a conversation with the user. Their earlier questions and the programs you answered with:\n\n"
+            + earlier + "\n\nNow the next question.\n\n" + prompt(question, refs: chat.refs)
+    }
+
+    // MARK: The trail
+
+    private func addLine(_ text: String, running: Bool = false, places: Bool = false) {
+        var line: [String: Any] = ["text": text]
+        if running { line["running"] = true }
+        if places { line["places"] = true }
+        trail.append(line)
+    }
+
+    private static let settled = ["Preparando a Pi…": "Pi empezó", "Retomando la conversación…": "Retomó la conversación",
+                                  "Pensando la respuesta…": "Pensó la respuesta"]
+
+    /// Every live line is done now (the next step started, or the answer is in).
+    private func settleLines() {
+        for index in trail.indices where trail[index]["running"] as? Bool == true {
+            trail[index]["running"] = nil
+            if let text = trail[index]["text"] as? String, let done = Self.settled[text] { trail[index]["text"] = done }
+        }
+    }
+
+    private func pushTrail() {
+        bridge.trail(turnID, lines: trail, summary: trailSummary,
+                     thinking: [narration, thinking].filter { !$0.isEmpty }.joined(separator: "\n\n"))
+    }
+
+    /// What a tool call says on the trail, while it runs and once it's done.
+    private func toolLine(_ name: String, args: [String: Any], result: [String: Any]?, failed: Bool) -> String {
+        let file = ((args["path"] as? String ?? "") as NSString).lastPathComponent
+        let pattern = args["pattern"] as? String ?? args["query"] as? String ?? ""
+        guard let result else {
+            switch name {
+            case "dig": return "Buscando «\(pattern)» en tus proyectos…"
+            case "read": return "Leyendo \(file.isEmpty ? "un archivo" : file)…"
+            case "grep": return "Buscando «\(pattern)» en el código…"
+            case "find": return "Buscando archivos «\(pattern)»…"
+            case "ls": return "Mirando \(args["path"] as? String ?? "la carpeta")…"
+            default: return "Mirando el código…"
+            }
+        }
+        if failed { return name == "read" ? "No pudo leer \(file)" : "Una búsqueda no salió" }
+        switch name {
+        case "dig":
+            let found = ((result["details"] as? [String: Any])?["refs"] as? [[String: Any]]) ?? []
+            let repos = Array(Set(found.compactMap { $0["repo"] as? String })).sorted()
+            return found.isEmpty ? "No encontró más lugares para «\(pattern)»"
+                : "Encontró \(placesCount(found.count)) más en \(Self.list(repos))"
+        case "read":
+            if let offset = args["offset"] as? Int, let limit = args["limit"] as? Int {
+                return "Leyó \(file), líneas \(offset)–\(offset + limit - 1)"
+            }
+            return "Leyó \(file)"
+        case "grep": return "Buscó «\(pattern)» en el código"
+        case "find": return "Buscó archivos «\(pattern)»"
+        case "ls": return "Miró \(args["path"] as? String ?? "la carpeta")"
+        default: return "Miró el código"
+        }
+    }
+
+    /// The last whole sentence of what the model is thinking, at most once a second: "Pensando: «…»".
+    private func showThought(_ text: String) {
+        guard !drawing, Date().timeIntervalSince(thoughtShownAt) >= 1 else { return }
+        let ends: Set<Character> = [".", "!", "?", "\n"]
+        let sentences = text.split(whereSeparator: { ends.contains($0) })
+        let closed = text.last.map(ends.contains) == true
+        guard var sentence = (closed ? sentences.last : sentences.dropLast().last)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), sentence.count > 8 else { return }
+        if sentence.count > 140 { sentence = "…" + sentence.suffix(139) }
+        thoughtShownAt = Date()
+        let line = "Pensando: «\(sentence)»"
+        if let last = trail.last?["text"] as? String, last.hasPrefix("Pensando: ") {
+            trail[trail.count - 1]["text"] = line
+        } else {
+            settleLines()
+            addLine(line, running: true)
+        }
+        pushTrail()
+    }
+
+    /// VoiceOver hears the phases, at most every 700 ms.
+    private func announce(_ text: String, always: Bool = false) {
+        guard !text.isEmpty, always || Date().timeIntervalSince(announcedAt) >= 0.7 else { return }
+        announcedAt = Date()
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+    }
+
+    // MARK: Pi and the page
 
     private func received(_ event: AgentRunner.Event) {
         switch event {
@@ -655,16 +733,41 @@ final class AskModel {
                 self.pending = nil
                 begin(pending, fresh: true)
             }
-        case .progress(let line):
-            progress = line
+        case .tool(let name, let args, let result, let failed):
+            guard working, !drawing else { return }
+            let text = toolLine(name, args: args, result: result, failed: failed)
+            if result == nil {
+                settleLines()
+                addLine(text, running: true)
+                announce(text)
+            } else if let index = trail.lastIndex(where: { $0["running"] as? Bool == true }) {
+                trail[index] = ["text": text]
+                if name == "read" { filesRead += 1 }
+            } else {
+                addLine(text)
+            }
+            pushTrail()
+        case .thinking(let delta):
+            thinking += delta
+            showThought(thinking)
+        case .narration(let text):
+            narration = text
+            showThought(text)
         case .program(let text):
             if repairing {
                 repair += text
             } else {
-                if !drawing { progress = "Drawing the answer…" }
-                drawing = true
+                if !drawing {
+                    drawing = true
+                    settleLines()
+                    let read = filesRead == 1 ? "leyó 1 archivo" : "leyó \(filesRead) archivos"
+                    trailSummary = (["Dibujando la respuesta…"] + (refs.isEmpty ? [] : [placesCount(refs.count)])
+                        + (filesRead > 0 ? [read] : [])).joined(separator: " · ")
+                    pushTrail()
+                    announce("Dibujando la respuesta")
+                }
                 bridge.append(text)
-                if UserDefaults.standard.bool(forKey: "debugAskAnswer") { debugProgram += text }
+                streamed += text
             }
         case .refs(let found):
             let roots = model.settings.codeRoots.map(\.path), skipped = model.settings.codeExcluded.map(\.path)
@@ -673,86 +776,159 @@ final class AskModel {
                 // The extension checked them; the app checks again before the page may open one.
                 guard let id = ref["id"] as? String, let file = ref["file"] as? String,
                       FolderSelection.isSearched(file, folders: roots, skipped: skipped) else { continue }
+                // An id the chat already has keeps its place: earlier turns cite it.
+                guard refs[id] == nil else {
+                    log("ask: Pi's \(id) is taken; kept the chat's")
+                    continue
+                }
                 ref["tint"] = projects.filter { file.hasPrefix($0.path + "/") }.map(\.index).first ?? 3
                 refs[id] = ref
                 added.append(ref)
             }
             if !added.isEmpty {
                 bridge.refs(added.map(Self.forPage))
-                let repos = Set(added.compactMap { $0["repo"] as? String }).sorted()
-                progress = "Found \(added.count) more \(added.count == 1 ? "place" : "places") in "
-                    + repos.formatted(.list(type: .and))
+                chat?.refs += added
+                for repo in added.compactMap({ $0["repo"] as? String }) where chat?.projects.contains(repo) == false {
+                    chat?.projects.append(repo)
+                }
             }
-        case .finished:
+        case .finished(let aborted):
             if UserDefaults.standard.bool(forKey: "debugAskAnswer") {
-                log("ask: \(repairing ? "repair" : "program"):\n\(repairing ? repair : debugProgram)")
+                log("ask: \(repairing ? "repair" : "program"):\n\(repairing ? repair : streamed)")
             }
             if repairing {
                 repairing = false
                 bridge.replace(repair)
-            } else if answer == .working {
-                bridge.done()
+            } else if working {
+                if aborted { stopped = true }
+                if drawing { bridge.done() } else { finishTurn(stopped ? .stopped : .failed("Pi no dibujó nada")) }
             }
         case .failed(let problem):
-            answer = .failed(problem)
+            guard working else { return }
+            if drawing { bridge.done() }
+            finishTurn(.failed(problem))
             log("ask: answer failed: \(problem)")
         }
     }
 
-    /// The page: a figure part opened, hovered or adapted, or what it couldn't draw.
+    /// The page: a piece opened or adapted, or what it couldn't draw.
     private func page(_ message: [String: Any]) {
         switch message["type"] as? String {
         case "open":
             guard let id = message["ref"] as? String, let ref = refs[id], let file = ref["file"] as? String else { return }
             CodeEditor.current.open(URL(fileURLWithPath: file), line: message["line"] as? Int ?? ref["focus"] as? Int ?? 1)
-        case "hover":
-            hovered = (message["ref"] as? String).flatMap { id in refIDs.first { $0.value == id }?.key }
+        case "pick":
+            // A pick in a card, a choice, a board or a next question: the chat's next question.
+            guard let text = (message["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty else { return }
+            let context = message["context"] as? [String: Any] ?? [:]
+            guard !working else {
+                // One answer at a time: it waits in the composer, never queued behind your back.
+                followUp = text
+                focusField()
+                return
+            }
+            let via = (context["block"] as? String).map {
+                ChatTurn.Via(turn: message["turn"] as? String ?? "", block: $0,
+                             choices: context["choices"] as? [String] ?? [])
+            }
+            ask(text, via: via, note: context["note"] as? String)
+        case "draft":
+            followUp = message["message"] as? String ?? ""
+            focusField()
         case "adapt":
-            let id = message["ref"] as? String ?? ""
-            followUp = "How would I adapt \(id)\((message["path"] as? String).map { " into \($0)" } ?? "")?"
-            followUpField?.window?.makeFirstResponder(followUpField)
+            let path = message["path"] as? String ?? ""
+            let from = (message["ref"] as? String).flatMap { refs[$0] }.map { "\($0["repo"] ?? "")/\($0["path"] ?? "")" }
+            followUp = "¿Cómo escribo \(path)\(from.map { " a partir de \($0)" } ?? "")?"
+            focusField()
         case "errors":
+            guard working, message["turn"] as? String == turnID else { return }
             let errors = message["errors"] as? [[String: Any]] ?? []
             for error in errors { log("ask: undrawn \(error["id"] as? String ?? "?"): \(error["message"] as? String ?? "")") }
-            if !errors.isEmpty, !repaired, message["final"] as? Bool != true, agent.isRunning {
+            if !errors.isEmpty, !repaired, !stopped, message["final"] as? Bool != true, agent.isRunning {
                 repaired = true
                 repairing = true
                 repair = ""
-                progress = "Fixing \(errors.count == 1 ? "a mistake" : "\(errors.count) mistakes") in the drawing…"
+                trailSummary = errors.count == 1 ? "Corrigiendo un error del dibujo…" : "Corrigiendo \(errors.count) errores del dibujo…"
+                pushTrail()
+                announce("Corrigiendo el dibujo")
                 let lines = errors.map { "\($0["id"] as? String ?? "?"): \($0["message"] as? String ?? "")" }
                 agent.correct("Reply with only the corrected statements, same ids:\n" + lines.joined(separator: "\n"))
                 return
             }
-            answer = .done
-            let seconds = Int(Date().timeIntervalSince(started).rounded())
-            progress = "Answered by \(agentModel?.name ?? "the model") in \(seconds) s"
-            log("ask: answered in \(seconds) s, \(errors.count) left undrawn")
+            finishTurn(stopped ? .stopped : .done, program: message["program"] as? String)
+            log("ask: answered in \(Int(Date().timeIntervalSince(started))) s, \(errors.count) left undrawn")
         default:
             break
         }
     }
 
+    private enum Outcome {
+        case done, stopped
+        case failed(String)
+    }
+
+    /// The turn is over: its folded trail line, and the chat saved.
+    private func finishTurn(_ outcome: Outcome, program: String? = nil) {
+        let seconds = Int(Date().timeIntervalSince(started).rounded())
+        let name = agentModel?.name ?? "el modelo"
+        let drawn = program ?? streamed
+        settleLines()
+        let saved: String
+        switch outcome {
+        case .done:
+            answer = .done
+            // The places the answer cites, whether the app or Pi's own digs found them.
+            let cited = Set(drawn.matches(of: /"([rd]\d+)(?::[\d\s\-–]+)?"/).map { String($0.output.1) })
+                .intersection(refs.keys).count
+            trailSummary = "Respondió \(name) en \(seconds) s" + (cited == 0 ? "" : " · cita \(placesCount(cited))")
+            announce("Respuesta lista, en \(seconds) segundos", always: true)
+            saved = "done"
+        case .stopped:
+            answer = .done
+            trailSummary = "Detuviste la respuesta a los \(seconds) s." + (drawing ? " Lo que alcanzó a dibujar se queda." : "")
+            saved = "stopped"
+        case .failed(let problem):
+            answer = .failed(problem)
+            trailSummary = "La respuesta se cortó: \(problem)." + (drawing ? " Lo que alcanzó a dibujar se queda." : "")
+            saved = "failed: \(problem)"
+        }
+        pushTrail()
+        bridge.busy(false)
+        guard var chat else { return }
+        chat.turns.append(ChatTurn(question: turnQuestion, asked: started, model: name, local: agentModel?.local ?? false,
+                                   seconds: seconds, program: drawn,
+                                   trail: trail.map { ChatTurn.TrailLine(text: $0["text"] as? String ?? "",
+                                                                         places: $0["places"] as? Bool) },
+                                   summary: trailSummary ?? "",
+                                   thinking: [narration, thinking].filter { !$0.isEmpty }.joined(separator: "\n\n"),
+                                   outcome: saved, via: turnVia))
+        turnVia = nil
+        self.chat = chat
+        chatLog.save(chat)
+        refreshHistory()
+    }
+
+    // MARK: Digging
+
     private func dig(now: Bool = false) {
         generation += 1
         let current = generation
         task?.cancel()
-        navigated = false
         dug = false
         let text = trimmed
         guard !text.isEmpty else {
             places = []
-            ignored = []
             return
         }
         guard engine.hasCode else { return }
         engine.prewarm()
         engine.embedAhead(text, code: true)
         let skipped = leftOut
-        let showAt = ContinuousClock.now + (now ? .zero : SearchPanelController.typingPause)
+        let showAt = ContinuousClock.now + (now ? .zero : SearchField.typingPause)
         task = Task {
             let vector = await engine.embedQuery(text, code: true)
             guard !Task.isCancelled, current == generation else { return }
-            questionVector = vector?.values
             let hits = await engine.search(text, vector: vector, prefixLast: false, limit: 40, code: true,
                                            zGate: Self.zGate)
             try? await Task.sleep(until: showAt, tolerance: .milliseconds(1), clock: .continuous)
@@ -767,20 +943,42 @@ final class AskModel {
                 return aDoc == bDoc ? a.offset < b.offset : !aDoc
             }.map(\.element)
             places = Array(rows.prefix(Self.placeLimit))
-            ignored = []
-            if !places.contains(where: { $0.id == selection }) { selection = places.first?.id }
-            dug = true
-            if answerWhenDug {
-                answerWhenDug = false
-                startAnswer()
-            }
+            // The refs name each place by what it's in, so the summaries are read before the answer starts.
             for row in places where summaries[row.id] == nil {
                 guard let text = await engine.text(ofSegment: row.segmentID, code: true), current == generation
                 else { continue }
                 summaries[row.id] = await Self.summary(text, of: row)
             }
+            guard current == generation else { return }
+            dug = true
+            if answerWhenDug {
+                answerWhenDug = false
+                startAnswer()
+            }
             log("ask: \"\(text)\": \(places.count) places in \(Set(places.map(repoName)).count) repos")
         }
+    }
+
+    /// A repo's notes (README, docs) rather than its code.
+    private static func isDoc(_ row: ResultRow) -> Bool {
+        Rules.codeTextExtensions.contains(row.url.pathExtension.lowercased())
+    }
+
+    /// A place in a line: what it defines, or, when it starts in the middle of something, what it's in ("en
+    /// HTTPAdapter.send", "en def send(…" when there's no class), from the file around it.
+    private static func summary(_ text: String, of row: ResultRow) async -> String {
+        let own = CodeExtractor.summary(text)
+        guard !CodeExtractor.defines(own), row.segment == .lines, let first = row.loc else { return own }
+        return await Task.detached {
+            guard let file = try? String(contentsOf: row.url, encoding: .utf8),
+                  let outer = CodeExtractor.enclosing(file, line: Int(first)) else { return own }
+            if let name = CodeExtractor.name(definedBy: outer.text),
+               let owner = CodeExtractor.enclosing(file, line: outer.line, within: 5000)
+                   .flatMap({ CodeExtractor.name(definedBy: $0.text) }) {
+                return "en \(owner).\(name)"
+            }
+            return "en " + outer.text
+        }.value
     }
 }
 

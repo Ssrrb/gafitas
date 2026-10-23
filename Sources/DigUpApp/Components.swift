@@ -2,33 +2,53 @@ import AppKit
 import DigUpKit
 import SwiftUI
 
-/// The app's own colors, from its icon (moss tiles around an amber D, `Resources/AppIcon`): amber marks what DigUp
-/// finds (accent icons), moss is for brand moments (onboarding's glow and tiles); selection and controls follow the
-/// system accent color like any Mac app.
+/// The app's own colors, from its icon (green sunglasses on a blue wash, `Resources/AppIcon/gafitas.png`): lime is
+/// "lit", the one colour of attention (the step being explained, the live dot); the frame takes the wash's blue at
+/// very low chroma; projects are cobalt, rose and amber. Controls and focus follow the system accent like any Mac app.
+/// The answer page gets the same values (`AnswerBridge.theme()`), so window and page are one surface.
 enum Brand {
-    static let amber = Color(red: 0.949, green: 0.635, blue: 0.165)    // #F2A22A, the D
-    static let ember = Color(red: 0.851, green: 0.482, blue: 0.102)    // #D97B1A, a deeper amber that holds up on white
-    static let moss = Color(red: 0.208, green: 0.400, blue: 0.322)     // #356652, the darkest tile
-    static let leaf = Color(red: 0.310, green: 0.502, blue: 0.345)     // #4F8058
-    static let sprout = Color(red: 0.635, green: 0.780, blue: 0.557)   // #A2C78E, a light tile
-    /// Accent icons: the D's amber.
-    static let gradient = LinearGradient(colors: [amber, ember], startPoint: .top, endPoint: .bottom)
-    /// Tiles with a white symbol on them, like the icon's.
-    static let tile = LinearGradient(colors: [leaf, moss], startPoint: .top, endPoint: .bottom)
-    /// The soft glow behind onboarding's steps.
-    static let wash = LinearGradient(colors: [sprout, leaf], startPoint: .topLeading, endPoint: .bottomTrailing)
+    typealias Pair = (light: UInt32, dark: UInt32)
 
-    /// A code folder's tint in the Ask window (its chip, its places, its dots on the map): leaf, cobalt, rose, at least
-    /// 60° of hue apart, a lighter one in dark mode. A fourth folder and on are gray.
+    static let groundHex: Pair = (0xF3F5F8, 0x17181B)
+    static let sheetHex: Pair = (0xFFFFFF, 0x1F2023)
+    static let edgeHex: Pair = (0xE3E5EA, 0x2E2F34)
+    static let textHex: Pair = (0x1D1D1F, 0xECECEC)
+    static let mutedHex: Pair = (0x5F6368, 0xA8A8AE)
+    static let fillHex: Pair = (0xEEF0F4, 0x2A2B2F)
+    static let activeHex: Pair = (0xE4E6EB, 0x2C2D32)
+    static let litHex: Pair = (0x3F9612, 0x86E04A)
+    static let litInkHex: Pair = (0x2E7D0B, 0x86E04A)
+    static let litFillHex: Pair = (0xE0FED2, 0x334527)
+    static let negativeHex: Pair = (0xC4242A, 0xE5566F)
+    /// Projects: cobalt (the icon's blue), rose, amber, at least 60° of hue apart. A fourth and on are muted.
+    static let tintHex: [Pair] = [(0x2552C9, 0x7EA2F5), (0xB8336A, 0xE77AA8), (0x9A6212, 0xE0A23E)]
+
+    static let ground = color(groundHex)
+    static let sheet = color(sheetHex)
+    static let edge = color(edgeHex)
+    /// Secondary words: 6:1 on the sheet (the system's secondary label is 3.95:1 on white).
+    static let muted = color(mutedHex)
+    static let fill = color(fillHex)
+    static let active = color(activeHex)
+    static let lit = color(litHex)
+    static let litInk = color(litInkHex)
+    static let litFill = color(litFillHex)
+    static let negative = color(negativeHex)
+
+    /// A code folder's tint (its chip, its dots, its pieces).
     static func projectTint(_ index: Int) -> Color {
-        let tints: [(light: UInt32, dark: UInt32)] = [(0x4F8058, 0xA2C78E), (0x2F6FB0, 0x6FA3E0), (0xB8336A, 0xE07AA6)]
-        guard let tint = tints[safe: index] else { return Color.secondary }
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? tint.dark : tint.light
+        tintHex[safe: index].map(color) ?? muted
+    }
+
+    static func color(_ pair: Pair) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? pair.dark : pair.light
             return NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
                            blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
         })
     }
+
+    static func hex(_ pair: Pair, dark: Bool) -> String { String(format: "#%06X", dark ? pair.dark : pair.light) }
 }
 
 /// ⇧ ⌘ Space as keycaps.
@@ -55,55 +75,7 @@ struct Keycaps: View {
     }
 }
 
-/// "p. 3" or "0:06" on a result: the page or moment that matched.
-struct PlaceBadge: View {
-    let text: String
-    var onImage = false
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 10, weight: .semibold).monospacedDigit())
-            .foregroundStyle(onImage ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(onImage ? AnyShapeStyle(.black.opacity(0.6)) : AnyShapeStyle(.quaternary)))
-    }
-}
-
-/// Where a moment sits in a recording: a track with the matched stretch lit.
-struct MomentBar: View {
-    let start: Double
-    let end: Double
-    let duration: Double
-    /// Drawn over a picture: white on a dark track.
-    var onImage = false
-    /// Where playback is, while it plays.
-    var playhead: Double?
-
-    var body: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let from = max(0, min(1, start / duration)), to = max(from, min(1, end / duration))
-            ZStack(alignment: .leading) {
-                Capsule().fill(onImage ? Color.white.opacity(0.3) : Color.primary.opacity(0.12))
-                Capsule()
-                    .fill(onImage ? Color.white : Color.accentColor)
-                    .frame(width: max(4, width * (to - from)))
-                    .offset(x: width * from)
-                if let playhead {
-                    Circle()
-                        .fill(Color.primary)
-                        .frame(width: 9, height: 9)
-                        .offset(x: width * max(0, min(1, playhead / duration)) - 4.5)
-                }
-            }
-        }
-        .frame(height: 4)
-        .accessibilityLabel("At \(ResultRow.clock(start)) of \(ResultRow.clock(duration))")
-    }
-}
-
-/// What a folder holds, compactly: 📷 136  🖼 104  📄 25 … (the full wording in the tooltip).
+/// What a folder holds, compactly, with the full wording in the tooltip.
 struct KindCounts: View {
     let counts: [FileKind: Int]
 
@@ -117,13 +89,13 @@ struct KindCounts: View {
             }
         }
         .font(.system(size: 11).monospacedDigit())
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Brand.muted)
         .help(description)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(description)
     }
 
-    /// "136 screenshots, 104 images, 25 PDFs"
+    /// "136 capturas, 104 imágenes, 25 PDF"
     var description: String {
         FileKind.allCases.compactMap { kind in
             counts[kind].flatMap { $0 > 0 ? kind.counted($0) : nil }
@@ -141,19 +113,19 @@ private struct CompactLabel: LabelStyle {
 }
 
 extension FileKind {
-    /// "1 screenshot", "25 PDFs", "6 audio files"
+    /// "1 captura", "25 PDF", "6 audios"
     func counted(_ count: Int) -> String {
         let one = count == 1
         let noun = switch self {
-        case .screenshot: one ? "screenshot" : "screenshots"
-        case .image: one ? "image" : "images"
-        case .pdf: one ? "PDF" : "PDFs"
-        case .doc: one ? "document" : "documents"
-        case .audio: one ? "audio file" : "audio files"
-        case .video: one ? "video" : "videos"
-        case .code: one ? "code file" : "code files"
+        case .screenshot: one ? "captura" : "capturas"
+        case .image: one ? "imagen" : "imágenes"
+        case .pdf: "PDF"
+        case .doc: one ? "documento" : "documentos"
+        case .audio: one ? "audio" : "audios"
+        case .video: one ? "vídeo" : "vídeos"
+        case .code: one ? "archivo de código" : "archivos de código"
         }
-        return "\(count.formatted()) \(noun)"
+        return "\(count.formatted(.number.locale(Locale(identifier: "es")))) \(noun)"
     }
 }
 
@@ -164,34 +136,80 @@ func openFolderPrivacySettings() {
     }
 }
 
-/// Matched words, which FTS marks with « », in bold.
-func highlighted(_ text: String, size: CGFloat) -> AttributedString {
-    var result = AttributedString()
-    var bold = false
-    var piece = ""
-    func flush() {
-        guard !piece.isEmpty else { return }
-        var run = AttributedString(piece)
-        if bold {
-            run.font = .system(size: size, weight: .bold)
-            run.foregroundColor = .primary
-        }
-        result += run
-        piece = ""
+/// The Ask window's question and follow-up fields. AppKit, so the window can focus them directly; the arrows, ↩ and
+/// Esc never reach them, because its key monitor takes those first.
+struct SearchField: NSViewRepresentable {
+    /// The pause in typing after which the question is dug up again.
+    static let typingPause: Duration = .milliseconds(120)
+    @Binding var text: String
+    var fontSize: CGFloat = 22
+    let placeholder: String
+    var onMake: (NSTextField) -> Void = { _ in }
+    /// The field got the cursor (true) or lost it (false).
+    var onFocus: (Bool) -> Void = { _ in }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = FocusReportingField()
+        field.onFocus = onFocus
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: fontSize)
+        field.placeholderString = placeholder
+        field.usesSingleLineMode = true
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.delegate = context.coordinator
+        field.setAccessibilityLabel("Pregunta")
+        onMake(field)
+        return field
     }
-    for character in text {
-        switch character {
-        case "«": flush(); bold = true
-        case "»": flush(); bold = false
-        default: piece.append(character)
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.text = $text
+        (field as? FocusReportingField)?.onFocus = onFocus
+        // While an input method composes (Korean, Japanese, Chinese), the field is ahead of `text` until the syllable
+        // is committed, and writing `text` back would cut the composition short ("사어ㅂ" typed for "사업").
+        if (field.currentEditor() as? NSTextView)?.hasMarkedText() != true, field.stringValue != text {
+            field.stringValue = text
+        }
+        if field.placeholderString != placeholder { field.placeholderString = placeholder }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text.wrappedValue = field.stringValue
         }
     }
-    flush()
-    return result
+}
+
+/// A text field that says when it gets the cursor and when it gives it up (its editing ends).
+final class FocusReportingField: NSTextField {
+    var onFocus: (Bool) -> Void = { _ in }
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocus(true) }
+        return became
+    }
+
+    override func textDidEndEditing(_ notification: Notification) {
+        super.textDidEndEditing(notification)
+        onFocus(false)
+    }
 }
 
 /// Click, then press the new shortcut; Esc cancels. While it listens, the global hotkey steps aside (`listening`) so
-/// that pressing the current one lands here instead of opening the panel.
+/// that pressing the current one lands here instead of opening the Ask window.
 struct ShortcutRecorder: View {
     let combo: KeyCombo?
     /// Tries a combination: nil when it's set, else why it can't be used.
@@ -206,11 +224,11 @@ struct ShortcutRecorder: View {
             Button { setRecording(!recording) } label: {
                 Group {
                     if recording {
-                        Text("Press the new shortcut…").foregroundStyle(.secondary)
+                        Text("Pulsa el atajo nuevo…").foregroundStyle(Brand.muted)
                     } else if let combo {
                         Keycaps(caps: combo.caps, size: capSize)
                     } else {
-                        Text("Click to set a shortcut").foregroundStyle(.secondary)
+                        Text("Haz clic para elegir un atajo").foregroundStyle(Brand.muted)
                     }
                 }
                 .font(.system(size: 13))
@@ -225,8 +243,8 @@ struct ShortcutRecorder: View {
             }
             .buttonStyle(.plain)
             .background(KeyCatcher(active: recording, onKey: handle, onResign: { setRecording(false) }))
-            .accessibilityLabel(recording ? "Recording a new shortcut" : "Shortcut \(combo?.display ?? "none"), click to change")
-            Text(problem ?? (recording ? "Esc cancels" : "Click to change"))
+            .accessibilityLabel(recording ? "Grabando un atajo nuevo" : "Atajo \(combo?.display ?? "ninguno"), haz clic para cambiarlo")
+            Text(problem ?? (recording ? "Esc cancela" : "Haz clic para cambiarlo"))
                 .font(.system(size: 11))
                 .foregroundStyle(problem == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.red))
                 .multilineTextAlignment(.center)
@@ -246,7 +264,7 @@ struct ShortcutRecorder: View {
                                                                                                .numericPad])
         if event.keyCode == 53, flags.isEmpty { return setRecording(false) }   // Esc
         guard let combo = KeyCombo(keyCode: event.keyCode, flags: flags) else {
-            problem = "Use ⌘, ⌥ or ⌃ with a key"
+            problem = "Usa ⌘, ⌥ o ⌃ con una tecla"
             return
         }
         if let why = apply(combo) {

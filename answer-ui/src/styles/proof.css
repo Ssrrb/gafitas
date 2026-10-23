@@ -1,0 +1,403 @@
+/* The Proof: premises as plates over an inference bar, the rule's name on the bar, the goal at the bottom. Ink at
+   rest; lime only on a checked bar, negative only on a break and the line that refuses it. */
+.g-proof {
+  margin: 0;
+}
+
+.g-pf-hint {
+  margin: -8px 0 16px;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+.g-pf-stage {
+  overflow: hidden;
+}
+
+/* Tree: each rule a column, its premises in a row over its bar. */
+.g-pf-tree[data-layout="tree"] {
+  width: max-content;
+  max-width: none;
+  margin: 0 auto;
+}
+
+.g-pf-node {
+  display: inline-grid;
+  justify-items: center;
+  row-gap: 6px;
+  min-width: 160px;
+}
+
+.g-pf-given {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  column-gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-pf-given > li {
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Stack: the phone, or any tree wider than its card. */
+.g-pf-tree[data-layout="stack"] .g-pf-node {
+  display: grid;
+  justify-items: stretch;
+  min-width: 0;
+}
+
+.g-pf-tree[data-layout="stack"] .g-pf-given {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.g-pf-tree[data-layout="stack"] .g-pf-given > li {
+  display: block;
+}
+
+.g-pf-tree[data-layout="stack"] .g-pf-given .g-pf-node {
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in srgb, var(--g-text) 10%, var(--g-sheet));
+}
+
+.g-pf-tree[data-layout="stack"] .g-pf-plate {
+  width: 100%;
+  max-width: none;
+  min-height: 44px;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.g-pf-tree[data-layout="stack"] .g-pf-goal {
+  justify-self: start;
+  justify-items: start;
+  text-align: left;
+}
+
+/* The bar: a 2px rule the width of its premises or its claim, whichever is wider. */
+.g-pf-bar {
+  position: relative;
+  justify-self: stretch;
+  height: 0;
+  margin: 10px 0 4px;
+  border-top: 2px solid var(--g-rest-bar);
+  transition: border-color 180ms ease;
+}
+
+.g-pf-fill {
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--g-lit);
+  transform-origin: left;
+  transform: scaleX(var(--pf-p, 1));
+  transition: transform 280ms var(--g-ease-out);
+}
+
+.g-pf-label {
+  position: absolute;
+  right: 0;
+  top: -11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 8px;
+  background: var(--g-sheet);
+  white-space: nowrap;
+}
+
+.g-pf-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--g-text);
+  font: 600 12.5px/20px var(--g-mono);
+  cursor: pointer;
+}
+
+button.g-pf-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button.g-pf-name:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.g-pf-ln {
+  color: var(--g-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-pf-tick {
+  color: var(--g-lit-ink);
+}
+
+/* A checked bar is lime in its own line too: the fill only animates it (and a page drawn to PDF drops the fill). */
+.g-pf-bar[data-state="checked"] {
+  border-top-color: var(--g-lit);
+  transition: border-color 0ms linear 280ms;
+}
+
+.g-pf-bar[data-state="stop"] {
+  border-top-color: var(--g-negative);
+}
+
+.g-pf-bar[data-state="stop"] .g-pf-name {
+  color: var(--g-negative);
+}
+
+.g-pf-bar[data-state="blocked"] {
+  border-top-style: dashed;
+  border-top-color: color-mix(in srgb, var(--g-text) 40%, var(--g-sheet));
+}
+
+.g-pf-bar[data-state="blocked"] .g-pf-name,
+.g-pf-bar[data-state="blocked"] .g-pf-ln {
+  color: var(--g-muted);
+}
+
+.g-pf-bar[data-state="stop"] .g-pf-fill,
+.g-pf-bar[data-state="blocked"] .g-pf-fill {
+  transform: scaleX(0);
+}
+
+/* Plates: the premises you can break. */
+.g-pf-plate {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 160px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--g-text) 4%, var(--g-sheet));
+  color: var(--g-text);
+  font: 500 14px/1.35 var(--g-font);
+  text-align: center;
+  text-wrap: balance;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease,
+    transform 140ms var(--g-ease-out);
+}
+
+.g-pf-plate:hover {
+  background: color-mix(in srgb, var(--g-text) 8%, var(--g-sheet));
+}
+
+.g-pf-plate:active {
+  transform: scale(0.98);
+}
+
+.g-pf-plate:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 2px;
+}
+
+.g-pf-plate code,
+.g-pf-goal code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--g-sheet);
+  font-size: 0.9em;
+}
+
+.g-pf-badge {
+  color: var(--g-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-pf-plate[data-state="broken"] {
+  background: var(--g-negative-fill);
+  color: var(--g-negative);
+}
+
+.g-pf-x {
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.g-pf-plate[data-state="broken"] .g-pf-claim {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.g-pf-plate[data-state="broken"] .g-pf-badge {
+  color: var(--g-negative);
+}
+
+.g-pf-plate[data-state="dim"] {
+  opacity: 0.4;
+}
+
+/* The goal: the conclusion everything leads to. */
+.g-pf-goal {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  max-width: 24em;
+  margin: 2px 0 0;
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 600;
+  text-align: center;
+  text-wrap: balance;
+  transition: opacity 180ms ease;
+}
+
+.g-pf-goal[data-state="blocked"] .g-pf-claim {
+  opacity: 0.4;
+}
+
+.g-pf-nogoal {
+  color: var(--g-negative);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Where checking stops: the real lines that refuse. */
+.g-pf-stop {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-top: 16px;
+  animation: g-pf-open 320ms var(--g-ease-out) 200ms both;
+}
+
+.g-pf-stop-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.g-pf-stop-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: var(--g-negative);
+  font-size: 12px;
+}
+
+.g-code-reject {
+  border-left: 3px solid var(--g-negative);
+  border-radius: 0 6px 6px 0;
+  text-align: left;
+}
+
+.g-code-reject .g-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.g-code-reject .g-line[data-focus] {
+  background: color-mix(in srgb, var(--g-negative) 12%, transparent);
+}
+
+.g-pf-noline {
+  margin: 0;
+  font-size: 14px;
+}
+
+@keyframes g-pf-open {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+/* The legend, drawn with the marks themselves. */
+.g-pf-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 16px;
+  color: var(--g-muted);
+  font-size: 12px;
+}
+
+.g-pf-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-pf-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.g-pf-mark {
+  width: 18px;
+  height: 0;
+  border-top: 2px solid var(--g-lit);
+}
+
+.g-pf-mark[data-state="stop"] {
+  border-top-color: var(--g-negative);
+}
+
+.g-pf-mark[data-state="blocked"] {
+  border-top-style: dashed;
+  border-top-color: color-mix(in srgb, var(--g-text) 40%, var(--g-sheet));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g-pf-fill {
+    transition: none;
+  }
+  .g-pf-plate,
+  .g-pf-bar,
+  .g-pf-goal {
+    transition-duration: 120ms;
+  }
+  .g-pf-plate:active {
+    transform: none;
+  }
+  .g-pf-stop {
+    animation: g-pf-fade 120ms ease both;
+  }
+}
+
+@keyframes g-pf-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A phone: the status gets its own line over the buttons, read left to right. */
+@container (max-width: 459px) {
+  .g-proof .g-walk-nav {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .g-proof .g-readout {
+    flex-basis: 100%;
+    text-align: left;
+  }
+}

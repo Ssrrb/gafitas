@@ -57,26 +57,41 @@ final class AnswerBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate
 
     func refs(_ refs: [[String: Any]]) { call("refs", refs) }
     func reset() { call("reset") }
+    func turn(_ id: String, question: String, via: ChatTurn.Via? = nil) {
+        let picked: Any = via.map { ["turn": $0.turn, "block": $0.block, "choices": $0.choices] } ?? NSNull()
+        call("turn", [id, question, picked], spread: true)
+    }
+    /// Pi is answering: the page's picks wait.
+    func busy(_ on: Bool) { call("busy", on) }
+    func trail(_ id: String, lines: [[String: Any]], summary: String?, thinking: String?) {
+        var trail: [String: Any] = ["lines": lines]
+        if let summary { trail["summary"] = summary }
+        if let thinking, !thinking.isEmpty { trail["thinking"] = thinking }
+        call("trail", [id, trail], spread: true)
+    }
     func append(_ text: String) { call("append", text) }
     func done() { call("done") }
     func replace(_ text: String) { call("replace", text) }
+    func load(_ turns: [[String: Any]]) { call("load", turns) }
     func select(_ ref: String?) { call("select", ref ?? NSNull()) }
 
-    /// The window's colors and fonts as CSS variables, so the page looks like the rest of it, light or dark.
+    /// The window's colors and fonts as CSS variables (the same `Brand` values the window draws with), so the page
+    /// and the window are one surface, light or dark.
     func theme() {
         let appearance = webView.effectiveAppearance
         var vars: [String: Any] = [:]
         appearance.performAsCurrentDrawingAppearance {
             let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            let hex = { (pair: Brand.Pair) in Brand.hex(pair, dark: dark) }
             vars = [
                 "theme": dark ? "dark" : "light",
-                "--g-ground": Self.hex(.windowBackgroundColor), "--g-sheet": Self.hex(.textBackgroundColor),
-                "--g-text": Self.hex(.labelColor), "--g-muted": Self.hex(.secondaryLabelColor),
-                "--g-faint": Self.hex(.tertiaryLabelColor), "--g-fill": Self.hex(.quaternaryLabelColor),
-                "--g-accent": Self.hex(.controlAccentColor),
-                "--g-amber": dark ? "#F2A22A" : "#D97B1A", "--g-moss": "#356652",
-                "--g-p1": dark ? "#A2C78E" : "#4F8058", "--g-p2": dark ? "#6FA3E0" : "#2F6FB0",
-                "--g-p3": dark ? "#E07AA6" : "#B8336A", "--g-p4": Self.hex(.secondaryLabelColor),
+                "--g-ground": hex(Brand.groundHex), "--g-sheet": hex(Brand.sheetHex), "--g-edge": hex(Brand.edgeHex),
+                "--g-text": hex(Brand.textHex), "--g-muted": hex(Brand.mutedHex), "--g-fill": hex(Brand.fillHex),
+                "--g-active": hex(Brand.activeHex), "--g-accent": Self.hex(.controlAccentColor),
+                "--g-lit": hex(Brand.litHex), "--g-lit-ink": hex(Brand.litInkHex), "--g-lit-fill": hex(Brand.litFillHex),
+                "--g-negative": hex(Brand.negativeHex),
+                "--g-p1": hex(Brand.tintHex[0]), "--g-p2": hex(Brand.tintHex[1]), "--g-p3": hex(Brand.tintHex[2]),
+                "--g-p4": hex(Brand.mutedHex),
                 "--g-font": "-apple-system, BlinkMacSystemFont, sans-serif",
                 "--g-mono": "ui-monospace, SFMono-Regular, monospace",
             ]
@@ -84,13 +99,32 @@ final class AnswerBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         call("theme", vars)
     }
 
-    private func call(_ function: String, _ argument: Any? = nil) {
+    /// The whole page as one picture, below the fold too (`takeSnapshot` stops at the view's bounds): a PDF of the
+    /// document, drawn at 2×.
+    func capturePage(then done: @escaping (NSImage?) -> Void) {
+        webView.createPDF(configuration: WKPDFConfiguration()) { result in
+            guard case .success(let data) = result, let pdf = NSPDFImageRep(data: data) else {
+                if case .failure(let error) = result { log("answer page: PDF failed: \(error)") }
+                return done(nil)
+            }
+            let size = pdf.bounds.size
+            let image = NSImage(size: size, flipped: false) { rect in
+                pdf.draw(in: rect)
+                return true
+            }
+            done(image)
+        }
+    }
+
+    /// `spread`: the argument is a list of the call's arguments, not one list argument.
+    private func call(_ function: String, _ argument: Any? = nil, spread: Bool = false) {
         var arguments = ""
         if let argument {
             // A string or a list, as a JSON literal (fragments allowed, for a plain string).
             guard let data = try? JSONSerialization.data(withJSONObject: argument, options: [.fragmentsAllowed])
             else { return }
             arguments = String(decoding: data, as: UTF8.self)
+            if spread { arguments = String(arguments.dropFirst().dropLast()) }
         }
         let script = "window.gafitas && window.gafitas.\(function)(\(arguments))"
         if ready { webView.evaluateJavaScript(script) } else { waiting.append(script) }

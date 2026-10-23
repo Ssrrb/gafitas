@@ -1,5 +1,5 @@
-/* The answer page. Framed-sheet art direction: it draws no background of its own, so the native sheet shows
-   through and nothing flashes white. */
+/* The answer page: the thread of one chat. Framed-sheet art direction: it draws no background of its own, so
+   the native sheet shows through and nothing flashes white. */
 *,
 *::before,
 *::after {
@@ -29,12 +29,43 @@ code {
   font-family: var(--g-mono);
 }
 
+.g-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .g-page {
-  --g-line: color-mix(in srgb, var(--g-text) 11%, var(--g-sheet));
   --g-hover: color-mix(in srgb, var(--g-text) 5%, transparent);
   max-width: 820px;
   margin: 0 auto;
-  padding: 20px 24px 40px;
+  padding: 24px 24px 48px;
+}
+
+/* A turn: the question, what Pi did, the answer. */
+.g-turn + .g-turn {
+  margin-top: 56px;
+}
+
+.g-turn {
+  scroll-margin-top: 16px;
+}
+
+/* A follow-up's question can scroll to the top of the sheet while its answer is still short. */
+.g-turn:last-child:not(:first-child) {
+  min-height: calc(100vh - 40px);
+}
+
+.g-question {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
 }
 
 .g-answer > * {
@@ -42,20 +73,34 @@ code {
 }
 
 .g-answer > :not(:first-child) {
-  margin-top: 28px;
+  margin-top: 32px;
+}
+
+.g-answer {
+  margin-top: 16px;
 }
 
 .g-lede {
-  max-width: 34em;
-  font-size: 20px;
-  line-height: 1.35;
+  max-width: 30em;
+  font-size: 22px;
+  line-height: 1.3;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
   text-wrap: pretty;
 }
 
+@media (max-width: 460px) {
+  .g-lede {
+    font-size: 20px;
+  }
+}
+
 .g-answer > .g-lede + :not(:first-child) {
-  margin-top: 20px;
+  margin-top: 24px;
+}
+
+.g-answer > .g-next {
+  margin-top: 24px;
 }
 
 .g-text,
@@ -66,18 +111,186 @@ code {
   text-wrap: pretty;
 }
 
+.g-caption {
+  margin: 10px 2px 0;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
 .g-lede code,
 .g-text code,
 .g-callout code,
 .g-caption code,
-.g-step-text code,
+.g-stop-say code,
 .g-check code,
-.g-side code,
-.g-what code {
+.g-side-point code {
   padding: 0 4px;
   border-radius: 4px;
   background: var(--g-fill);
   font-size: 0.87em;
+}
+
+/* The trail: what Pi is doing, then one folded line. */
+.g-trail,
+.g-trail-sum {
+  margin: 8px 0 0;
+  color: var(--g-muted);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.g-trail-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-trail-lines > li,
+.g-trail-sum {
+  position: relative;
+  padding-left: 16px;
+}
+
+.g-trail-lines > li::before,
+.g-trail-sum::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--g-text) 25%, var(--g-sheet));
+}
+
+.g-trail-lines > li[data-running],
+.g-trail-sum[data-running] {
+  color: var(--g-text);
+}
+
+.g-trail-lines > li[data-running]::before,
+.g-trail-sum[data-running]::before {
+  background: var(--g-lit);
+  animation: g-breathe 1.6s ease-in-out infinite;
+}
+
+.g-trail-more {
+  color: var(--g-muted);
+}
+
+.g-trail-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+}
+
+@keyframes g-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.g-places {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.g-places-row {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) 1fr;
+  align-items: start;
+  gap: 4px 10px;
+}
+
+.g-places-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.g-places-repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  color: var(--g-text);
+}
+
+.g-loose-piece {
+  height: 22px;
+  max-width: 260px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--g-text) 14%, var(--g-sheet));
+  border-radius: 5px;
+  background: var(--g-p1-pale);
+  color: var(--g-text);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.g-loose-piece[data-tint="2"] {
+  background: var(--g-p2-pale);
+}
+
+.g-loose-piece[data-tint="3"] {
+  background: var(--g-p3-pale);
+}
+
+.g-loose-piece[data-tint="4"] {
+  background: var(--g-p4-pale);
+}
+
+.g-loose-piece:hover {
+  border-color: color-mix(in srgb, var(--g-text) 40%, var(--g-sheet));
+}
+
+.g-places-more {
+  font-variant-numeric: tabular-nums;
+}
+
+.g-thinking {
+  margin: 8px 0;
+}
+
+.g-thinking-head {
+  margin: 0 0 4px;
+  color: var(--g-text);
+  font-weight: 600;
+}
+
+.g-thinking-text {
+  max-height: 240px;
+  padding: 8px 12px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--g-fill);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.g-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--g-text);
+  font-size: 13px;
+  transition: text-decoration-color 180ms ease;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--g-text) 30%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.g-link:hover {
+  text-decoration-color: currentColor;
 }
 
 /* Chips: a tint dot, repo/path, a line badge. */
@@ -88,7 +301,7 @@ code {
   max-width: 100%;
   height: 22px;
   padding: 0 8px 0 7px;
-  border: 1px solid var(--g-line);
+  border: 1px solid var(--g-edge);
   border-radius: 999px;
   background: var(--g-sheet);
   color: var(--g-text);
@@ -105,13 +318,16 @@ code {
 .g-chip:focus-visible,
 .g-button:focus-visible,
 .g-option:focus-visible,
-.g-steps button:focus-visible {
+.g-link:focus-visible,
+.g-loose-piece:focus-visible,
+.g-other:focus-visible,
+.g-tile:focus-visible {
   outline: 2px solid var(--g-accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .g-chip[data-selected] {
-  border-color: var(--g-amber);
+  border-color: var(--g-lit);
 }
 
 .g-chip-text {
@@ -119,11 +335,6 @@ code {
   font-family: var(--g-mono);
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.g-chip[data-compact] {
-  height: 20px;
-  font-size: 11.5px;
 }
 
 .g-dot {
@@ -153,9 +364,14 @@ code {
   font-variant-numeric: tabular-nums;
 }
 
-/* Snippet: the real lines from the ref table, the focus line in amber. */
+/* Snippet: the real lines from the ref table, the focus line lit. */
 .g-snippet {
   margin: 0;
+}
+
+.g-snippet[data-selected] .g-code {
+  outline: 2px solid var(--g-lit);
+  outline-offset: -2px;
 }
 
 .g-snippet-head {
@@ -198,14 +414,50 @@ code {
 }
 
 .g-line[data-focus] {
-  background: color-mix(in srgb, var(--g-amber) 16%, transparent);
+  background: color-mix(in srgb, var(--g-lit) 16%, transparent);
+}
+
+.g-line[data-echo] {
+  background: color-mix(in srgb, var(--g-lit) 10%, transparent);
+}
+
+.g-line[data-echo] .g-ln {
+  color: var(--g-lit-ink);
+}
+
+.g-line[data-comment] .g-lt {
+  color: var(--g-muted);
+}
+
+/* A fold: the hidden lines, one click from being read in place. */
+.g-gap {
+  display: block;
+  width: 100%;
+  padding: 0 14px 0 calc(var(--g-gutter, 3ch) + 24px);
+  border: 0;
+  background: none;
+  color: var(--g-muted);
+  font: inherit;
+  text-align: left;
+  white-space: pre;
+  cursor: pointer;
+}
+
+.g-gap:hover {
+  background: var(--g-hover);
+  color: var(--g-text);
+}
+
+.g-gap:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: -2px;
 }
 
 .g-ln {
   display: inline-block;
   width: calc(var(--g-gutter, 3ch) + 24px);
   padding: 0 12px;
-  color: var(--g-faint);
+  color: var(--g-muted);
   text-align: right;
   font-variant-numeric: tabular-nums;
   user-select: none;
@@ -222,16 +474,10 @@ code {
   margin: 0;
 }
 
-.g-compare {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
 .g-side {
   min-width: 0;
   padding: 12px 14px;
-  border: 1px solid var(--g-line);
+  border: 1px solid var(--g-edge);
   border-radius: 8px;
 }
 
@@ -257,57 +503,42 @@ code {
   font-weight: 600;
 }
 
-.g-newcode ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.g-newitem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--g-line);
-  border-radius: 8px;
-}
-
-.g-newitem-main {
-  display: grid;
-  flex: 1;
-  gap: 3px;
-  min-width: 0;
-}
-
-.g-path {
-  overflow-wrap: anywhere;
-  font-size: 13px;
-}
-
-.g-adapts {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--g-muted);
-  font-size: 12px;
-}
-
 .g-button {
+  display: inline-flex;
   flex: none;
-  height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
   padding: 0 12px;
-  border: 1px solid var(--g-line);
-  border-radius: 8px;
+  border: 1px solid var(--g-edge);
+  border-radius: 6px;
   background: var(--g-sheet);
+  color: var(--g-text);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    transform 140ms var(--g-ease-out);
 }
 
 .g-button:hover {
   background: var(--g-fill);
+}
+
+.g-button:active:not([aria-disabled="true"]),
+.g-chip:active,
+.g-next-q:active:not([aria-disabled="true"]) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g-button:active:not([aria-disabled="true"]),
+  .g-chip:active,
+  .g-next-q:active:not([aria-disabled="true"]) {
+    transform: none;
+  }
 }
 
 .g-check-q {
@@ -325,12 +556,16 @@ code {
   align-items: flex-start;
   gap: 10px;
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--g-line);
-  border-radius: 8px;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid var(--g-edge);
+  border-radius: 6px;
   background: var(--g-sheet);
+  color: var(--g-text);
+  font-size: 14px;
   text-align: left;
   cursor: pointer;
+  transition: background-color 180ms ease;
 }
 
 .g-option:hover {
@@ -352,16 +587,32 @@ code {
 }
 
 .g-option[data-state="right"] {
-  border-color: var(--g-moss);
+  border-color: var(--g-lit-ink);
 }
 
 .g-option[data-state="right"] .g-option-n {
-  background: var(--g-moss);
+  background: var(--g-lit-ink);
   color: var(--g-sheet);
 }
 
 .g-option[data-state="wrong"] {
   color: var(--g-muted);
+  text-decoration: line-through;
+}
+
+.g-option[data-state="wrong"] .g-option-n {
+  background: var(--g-negative);
+  color: var(--g-sheet);
+}
+
+.g-check-proof {
+  animation: g-rise 320ms var(--g-ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g-check-proof {
+    animation: none;
+  }
 }
 
 .g-why {
@@ -375,21 +626,87 @@ code {
   font-size: 13px;
 }
 
+/* Otros lugares encontrados. */
+.g-others {
+  margin-top: 32px;
+}
+
+.g-others ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-other {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.g-other:hover {
+  background: var(--g-hover);
+}
+
+.g-other-path {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.g-other-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--g-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.g-others .g-link {
+  margin: 6px 8px 0;
+}
+
 @media (max-width: 560px) {
   .g-page {
     padding: 16px 16px 32px;
   }
 
-  .g-compare {
-    grid-template-columns: 1fr;
+  .g-other-summary {
+    display: none;
   }
 
-  .g-newitem {
-    flex-direction: column;
-    align-items: stretch;
+  /* On a narrow sheet code wraps under its own indent instead of running off the edge. */
+  .g-line {
+    padding-left: calc(var(--g-gutter, 3ch) + 24px);
+    text-indent: calc(-1 * (var(--g-gutter, 3ch) + 24px));
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
-  .g-newitem .g-button {
-    align-self: flex-start;
+  .g-code code {
+    min-width: 0;
+  }
+
+  /* A size down, so a line indented four levels still fits before it wraps. */
+  .g-code {
+    font-size: 11.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g-trail-lines > li[data-running]::before,
+  .g-trail-sum[data-running]::before {
+    animation: none;
   }
 }

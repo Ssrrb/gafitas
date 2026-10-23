@@ -1,5 +1,3 @@
-p4 = Part("Skill loader", "adapter", "", "Wraps each skill as a tool", "new")
-m1 = Coupling([p1, p2, p4, p3], [s1, s2, s3])
-s2 = Step(3, "The loader wraps the skill as a tool.")
-s3 = Step(4, "It reaches the tool list.")
-x1 = Snippet("r2:40-52", "Where Hermes records a skill")
+j2 = Joint(p2, p3, "skills del índice como Tool")
+z1 = Puzzle("Cómo llega una skill al harness", [p1, p2, p3], [j1, j2], [s1, s2], "Un cargador une ambos lados.")
+x1 = Snippet("r2:44-56", "Donde se anota una skill")

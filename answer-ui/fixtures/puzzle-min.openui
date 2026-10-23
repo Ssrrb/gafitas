@@ -1,0 +1,6 @@
+root = Answer("Session.send no envía nada por sí mismo: le pasa la petición al adaptador montado para la URL.", [z1])
+p1 = Piece("Session.send", "r1:784", "method")
+p2 = Piece("HTTPAdapter.send", "r2", "method")
+j1 = Joint(p1, p2, "request, **kwargs")
+s1 = Step(j1, "Session.send llama a adapter.send con la petición preparada.")
+z1 = Puzzle("Quién envía de verdad", [p1, p2], [j1], [s1])

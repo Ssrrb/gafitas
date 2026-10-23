@@ -1,0 +1,477 @@
+// The figure: each real unit of code is a jigsaw tile, its project's colour; a joint is the edge two tiles
+// share, its knob where one hands work to the next, labelled with what crosses. The shapes are SVG; every word
+// is HTML on top (real buttons, CSS clamping), so VoiceOver reads the pieces, joints and steps as lists.
+import * as React from "react";
+import type { ElementNode } from "@openuidev/lang-core";
+import { useTriggerAction } from "@openuidev/react-lang";
+import { Pause, Play } from "lucide-react";
+import { whenSeen } from "../autoplay";
+import { post } from "../post";
+import { DEFAULT_WIDTH, K, layout, type Layout } from "../puzzle/layout";
+import { basename, readPuzzle, type PuzzleModel, type PuzzlePiece } from "../puzzle/model";
+import { KNOB_HALF, knobPath, knobSegment, tilePath } from "../puzzle/path";
+import { isStill } from "../still";
+import { TurnContext, usePicks, useRefs, useSelected } from "../store";
+import { adaptAria, alsoJoint, linesAria, linesShort, puzzleAria, S, stepOf, stepsCount } from "../strings";
+
+/** Cut a line to what fits the tile (12px text: about 7.2px a character in SF Mono, 6.4 in SF), so nothing runs
+ * past its tile even unclipped. */
+const fit = (text: string, width: number, perChar: number) => {
+  const max = Math.max(4, Math.floor(width / perChar));
+  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
+};
+
+/** A code line with the name it calls marked: what crosses to the next piece starts there. */
+function Called({ text, call }: { text: string; call: string }) {
+  const at = call ? text.search(new RegExp(`(?<![\\w$])${call.replace(/[$]/g, "\\$")}\\s*\\(`)) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <b className="g-call">{call}</b>
+      {text.slice(at + call.length)}
+    </>
+  );
+}
+
+/** Turns whose figure already played its entrance: a repair remount or a reflow never replays it. */
+const entered = new Set<string>();
+
+/** How long play stays on a step: a hand-off travels then holds; a piece holds. */
+const dwell = (step: { lit: unknown } | undefined) => (step?.lit && typeof step.lit === "object" && "joint" in step.lit ? 1600 : 1400);
+const TRAVEL = 900;
+
+/** Break a code name before each "." and after each "_", so it wraps where a reader would. */
+function CodeName({ name }: { name: string }) {
+  const parts = name.split(/(?=\.)|(?<=_)/);
+  return (
+    <>
+      {parts.map((part, i) => (
+        <React.Fragment key={i}>
+          {i ? <wbr /> : null}
+          {part}
+        </React.Fragment>
+      ))}
+    </>
+  );
+}
+
+function useWidth(ref: React.RefObject<HTMLDivElement | null>) {
+  const [width, setWidth] = React.useState(DEFAULT_WIDTH);
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setWidth(el.clientWidth || DEFAULT_WIDTH);
+    measure();
+    if (typeof ResizeObserver !== "function") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
+}
+
+const pieceAria = (piece: PuzzlePiece) => {
+  if (piece.type === "Idea") return [piece.name, piece.note].filter(Boolean).join(". ");
+  if (piece.type === "NewPiece") return `${piece.name}, ${S.isNew}, ${piece.path}`;
+  const ref = piece.ref;
+  const where = ref ? `${basename(ref.entry.path)}, ${linesAria(ref.from, ref.to)}` : "";
+  return [piece.name, [piece.kind, piece.band].filter(Boolean).join(" de "), where, S.openCode].filter(Boolean).join(", ");
+};
+
+export function PuzzleBlock({ props, statementId }: { props: Record<string, unknown>; statementId?: string }) {
+  const refs = useRefs();
+  // Lay out only once the steps are in: pieces and joints are complete by then, so nothing reflows mid-stream.
+  if (!Array.isArray(props.steps)) return null;
+  const model = readPuzzle({ type: "element", typeName: "Puzzle", props } as unknown as ElementNode, refs);
+  if (model.pieces.length < 2) return null;
+  return <Puzzle model={model} block={statementId} />;
+}
+
+function Puzzle({ model, block }: { model: PuzzleModel; block?: string }) {
+  const trigger = useTriggerAction();
+  const { busy } = usePicks();
+  const { pieces, joints, steps } = model;
+  const selected = useSelected();
+  const turn = React.useContext(TurnContext);
+  const uid = React.useId().replace(/:/g, "");
+  const stage = React.useRef<HTMLDivElement>(null);
+  const width = useWidth(stage);
+  const [step, setStep] = React.useState(0);
+  const [hover, setHover] = React.useState<number | null>(null);
+  const [playing, setPlaying] = React.useState(false);
+  const token = React.useRef<HTMLSpanElement>(null);
+  const card = React.useRef<HTMLDivElement>(null);
+  const touched = React.useRef(false);
+  const [enter, setEnter] = React.useState(() => !turn.replay && !isStill() && !entered.has(turn.key));
+  React.useEffect(() => {
+    if (turn.key) entered.add(turn.key);
+    // WebKit pauses animations outside the viewport: the entrance ends by the clock too, so no piece stays hidden.
+    if (!enter) return;
+    const timer = window.setTimeout(() => setEnter(false), 700);
+    return () => window.clearTimeout(timer);
+  }, [turn.key, enter]);
+
+  const L: Layout = React.useMemo(
+    () =>
+      layout(
+        pieces.map((p) => ({ band: p.band, name: p.name, rows: p.rows.length || 1 })),
+        joints.map((j) => ({ from: j.from, to: j.to })),
+        width,
+      ),
+    [pieces, joints, width],
+  );
+
+  const count = steps.length;
+  const current = count ? Math.min(step, count - 1) : -1;
+  const chosen = selected ? pieces.findIndex((p) => p.ref?.entry.id === selected) : -1;
+  const shownStep = chosen >= 0 ? steps.findIndex((s) => s.lit && "piece" in s.lit && s.lit.piece === chosen) : current;
+  const lit = chosen >= 0 ? { piece: chosen } : current >= 0 ? steps[current]!.lit : null;
+  const litPiece = lit && "piece" in lit ? lit.piece : -1;
+  const litJoint = lit && "joint" in lit ? lit.joint : -1;
+  // What crosses a hand-off travels it: from the giver's hand-off line, through the knob, to the receiver's name.
+  React.useEffect(() => {
+    const el = token.current;
+    if (!playing || litJoint < 0 || !el || isStill() || typeof el.animate !== "function") return;
+    const seam = L.seams.find((s) => s.joint === litJoint);
+    const joint = joints[litJoint];
+    if (!seam || !joint) return;
+    const give = L.tiles[joint.from]!;
+    const take = L.tiles[joint.to]!;
+    const row = Math.max(0, pieces[joint.from]!.rows.findIndex((r) => r.main));
+    const w = el.offsetWidth;
+    const a = { x: give.x + 14, y: give.y + K.SOCKET + L.lines * K.LINE + K.LINE + row * K.ROW };
+    const b = { x: seam.x - w / 2, y: seam.y - 11 };
+    const c = { x: take.x + 14, y: take.y + K.SOCKET - 24 };
+    const at = (p: { x: number; y: number }, q: { x: number; y: number }, t: number) => `translate(${p.x + (q.x - p.x) * t}px, ${p.y + (q.y - p.y) * t}px)`;
+    const animation = el.animate(
+      [
+        { transform: at(a, b, 0), opacity: 0, offset: 0 },
+        { transform: at(a, b, 0.26), opacity: 1, offset: 0.13 },
+        { transform: at(a, b, 1), opacity: 1, offset: 0.5 },
+        { transform: at(b, c, 0.64), opacity: 1, offset: 0.82 },
+        { transform: at(b, c, 1), opacity: 0, offset: 1 },
+      ],
+      { duration: TRAVEL, easing: "cubic-bezier(0.76, 0, 0.24, 1)", fill: "forwards" },
+    );
+    return () => animation.cancel();
+  }, [playing, litJoint, L, joints, pieces]);
+
+  const joinedTo = (i: number) => joints.flatMap((j, index) => (j.from === i || j.to === i ? [index] : []));
+
+  const go = (to: number) => {
+    if (!count) return;
+    touched.current = true;
+    setPlaying(false);
+    setStep(((to % count) + count) % count);
+  };
+
+  // Play walks the steps on its own, from here (or from the start, at the end) to the last one.
+  const play = () => {
+    touched.current = true;
+    if (playing) return setPlaying(false);
+    if (current >= count - 1) setStep(0);
+    setPlaying(true);
+  };
+  React.useEffect(() => {
+    if (!playing) return;
+    if (current >= count - 1) {
+      const timer = window.setTimeout(() => setPlaying(false), dwell(steps[current]));
+      return () => window.clearTimeout(timer);
+    }
+    const timer = window.setTimeout(() => setStep(current + 1), dwell(steps[current]));
+    return () => window.clearTimeout(timer);
+  }, [playing, current, count, steps]);
+
+  // Once, after the entrance, when the figure is half in view: one walk through the steps.
+  React.useEffect(() => {
+    if (turn.replay || turn.live || isStill() || count < 2 || touched.current) return;
+    return whenSeen(card.current, turn.key, () => {
+      if (touched.current) return 0;
+      setStep(0);
+      setPlaying(true);
+      return steps.reduce((total, s) => total + dwell(s), 300);
+    });
+  }, [turn.replay, turn.live, turn.key, count, steps]);
+
+  const hoverPiece = (i: number | null) => {
+    if (i !== null) {
+      touched.current = true;
+      setPlaying(false);
+    }
+    setHover(i);
+    post({ type: "hover", ref: i === null ? null : (pieces[i]!.ref?.entry.id ?? null) });
+  };
+
+  const describe = (target: typeof lit) => {
+    if (!target) return "";
+    if ("piece" in target) return pieces[target.piece]?.name ?? "";
+    const j = joints[target.joint];
+    return j ? `${pieces[j.from]!.name} → ${pieces[j.to]!.name}` : "";
+  };
+  const hovered = hover === null ? null : pieces[hover]!;
+  const readout = hovered
+    ? hovered.ref
+      ? `${hovered.ref.entry.repo}/${hovered.ref.entry.path} · ${linesAria(hovered.ref.from, hovered.ref.to)}`
+      : hovered.path
+    : [shownStep >= 0 ? stepOf(shownStep + 1, count) : count ? stepsCount(count) : "", (shownStep >= 0 ? steps[shownStep]!.text : "") || describe(lit)].filter(Boolean).join(" · ");
+
+  const bands = L.bands.filter(Boolean);
+  const tintOfBand = (band: string) => pieces.find((p) => p.band === band && p.tint)?.tint ?? 0;
+  const hasNew = pieces.some((p) => p.type === "NewPiece");
+  const hasIdea = pieces.some((p) => p.type === "Idea");
+
+  return (
+    <figure className="g-puzzle">
+      <div
+        ref={card}
+        className="g-card"
+        tabIndex={0}
+        role="group"
+        aria-roledescription={S.puzzle}
+        aria-label={puzzleAria(model.title, pieces.length, joints.length)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowRight" || event.key === "ArrowDown") go(current + 1);
+          else if (event.key === "ArrowLeft" || event.key === "ArrowUp") go(current - 1);
+          else if (event.key === "Home") go(0);
+          else if (event.key === "End") go(count - 1);
+          else if (event.key === " " && event.target === event.currentTarget) play();
+          else return;
+          event.preventDefault();
+        }}
+      >
+        <header className="g-puzzle-head">
+          <span className="g-puzzle-title">{model.title}</span>
+          {count ? (
+            <span className="g-walk-nav">
+              <span className="g-readout" aria-live={playing ? "off" : "polite"}>
+                {readout}
+              </span>
+              <button type="button" className="g-button g-step-button" aria-label={S.prevStep} onClick={() => go(current - 1)}>
+                ‹
+              </button>
+              <button type="button" className="g-button g-play" aria-pressed={playing} aria-label={playing ? S.pauseSteps : S.playSteps} onClick={play}>
+                {playing ? <Pause size={12} strokeWidth={2.25} aria-hidden="true" /> : <Play size={12} strokeWidth={2.25} aria-hidden="true" />}
+                <span className="g-play-label">{playing ? S.pause : S.play}</span>
+              </button>
+              <button type="button" className="g-button g-step-button" aria-label={S.nextStep} onClick={() => go(current + 1)}>
+                ›
+              </button>
+            </span>
+          ) : null}
+        </header>
+
+        <div ref={stage} className="g-stage" data-enter={enter ? "" : undefined} style={{ height: L.height }}>
+          <svg className="g-puzzle-svg" width={L.width} height={L.height} viewBox={`0 0 ${L.width} ${L.height}`} aria-hidden="true">
+            <defs>
+              {L.tiles.map((tile, i) => (
+                <clipPath key={i} id={`${uid}-c${i}`}>
+                  <path d={tilePath(tile, tile.top, tile.bottom)} />
+                </clipPath>
+              ))}
+            </defs>
+            <g>
+              {L.tiles.map((tile, i) => (
+                <path
+                  key={i}
+                  className="g-fill"
+                  d={tilePath(tile, tile.top, tile.bottom)}
+                  data-tint={pieces[i]!.tint || undefined}
+                  data-type={pieces[i]!.type}
+                  data-lit={i === litPiece ? "" : undefined}
+                  style={{ "--i": i } as React.CSSProperties}
+                />
+              ))}
+            </g>
+            <g>
+              {/* New pieces first: where a real neighbour touches the hole, its solid edge shows. */}
+              {[...L.tiles.keys()]
+                .sort((a, b) => Number(pieces[b]!.type === "NewPiece") - Number(pieces[a]!.type === "NewPiece"))
+                .map((i) => (
+                  <path key={i} className="g-edge" d={tilePath(L.tiles[i]!, L.tiles[i]!.top, L.tiles[i]!.bottom)} data-type={pieces[i]!.type} style={{ "--i": i } as React.CSSProperties} />
+                ))}
+            </g>
+            <g>
+              {hover !== null && hover !== litPiece ? (
+                <path className="g-hover-edge" d={tilePath(L.tiles[hover]!, L.tiles[hover]!.top, L.tiles[hover]!.bottom)} clipPath={`url(#${uid}-c${hover})`} />
+              ) : null}
+              {litPiece >= 0 && L.tiles[litPiece] ? (
+                <path className="g-lit-edge" d={tilePath(L.tiles[litPiece]!, L.tiles[litPiece]!.top, L.tiles[litPiece]!.bottom)} clipPath={`url(#${uid}-c${litPiece})`} />
+              ) : null}
+              {L.seams.map((seam) =>
+                seam.joint === litJoint ? (
+                  <path key={seam.joint} className="g-knob-lit" d={knobPath(seam.x, seam.y, seam.s)} />
+                ) : hover !== null && (seam.upper === hover || seam.lower === hover) ? (
+                  <path key={seam.joint} className="g-knob-hover" d={`M ${seam.x - KNOB_HALF} ${seam.y} ${knobSegment(seam.x, seam.y, seam.s, 1)}`} />
+                ) : null,
+              )}
+            </g>
+          </svg>
+
+          <ol className="g-tiles" aria-label={S.pieces}>
+            {pieces.map((piece, i) => {
+              const tile = L.tiles[i]!;
+              const style = { left: tile.x, top: tile.y, width: tile.w, height: tile.h, "--i": i } as React.CSSProperties;
+              const events = {
+                onPointerEnter: () => hoverPiece(i),
+                onPointerLeave: () => hoverPiece(null),
+                onFocus: () => hoverPiece(i),
+                onBlur: () => hoverPiece(null),
+              };
+              const ref = piece.ref;
+              return (
+                <li key={piece.id} className="g-tile-slot" style={style} aria-current={i === litPiece ? "true" : undefined}>
+                  {piece.type === "Piece" ? (
+                    <button
+                      type="button"
+                      className="g-tile"
+                      aria-label={pieceAria(piece)}
+                      onClick={() => ref && post({ type: "open", ref: ref.entry.id, line: ref.line })}
+                      {...events}
+                    >
+                      <code className="g-tile-name">
+                        <CodeName name={piece.name} />
+                      </code>
+                      <span className="g-tile-meta">{fit([ref ? linesShort(basename(ref.entry.path), ref.from, ref.to) : "", piece.kind].filter(Boolean).join(" · "), tile.w - 28, 6.4)}</span>
+                      {piece.rows.length ? (
+                        <code className="g-tile-code">
+                          {piece.rows.map((row, r) => (
+                            <span key={r} className="g-tile-row" data-main={row.main ? "" : undefined}>
+                              <Called text={fit(row.text, tile.w - 28, 6.9)} call={row.main ? piece.call : ""} />
+                            </span>
+                          ))}
+                        </code>
+                      ) : null}
+                    </button>
+                  ) : piece.type === "NewPiece" ? (
+                    <div className="g-tile" data-type="new" {...events}>
+                      <code className="g-tile-name">
+                        <CodeName name={piece.name} />
+                      </code>
+                      <span className="g-tile-new">
+                        <span className="g-tile-meta">
+                          {basename(piece.path)} · {S.isNew}
+                        </span>
+                        <button
+                          type="button"
+                          className="g-button g-adapt"
+                          aria-label={adaptAria(piece.adapts ? `${piece.adapts.repo}/${piece.adapts.path}` : "", piece.name)}
+                          onClick={() => post({ type: "adapt", ref: piece.adapts?.id ?? null, path: piece.path })}
+                        >
+                          {S.adapt}
+                        </button>
+                      </span>
+                      {piece.note ? (
+                        <span className="g-tile-note" data-one="" title={piece.note}>
+                          {piece.note}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="g-tile" data-type="idea">
+                      <span className="g-tile-name g-idea-name">{piece.name}</span>
+                      {piece.note ? <span className="g-tile-note">{piece.note}</span> : null}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+
+          <span ref={token} className="g-token" aria-hidden="true">
+            {litJoint >= 0 && joints[litJoint] ? fit(joints[litJoint]!.label, 220, 7.4) : ""}
+          </span>
+
+          <ul className="g-joints" aria-label={S.joints}>
+            {L.seams.map((seam) => {
+              const joint = joints[seam.joint]!;
+              const { label } = seam;
+              const same = L.tiles[seam.upper]!.x === L.tiles[seam.lower]!.x;
+              return (
+                <li
+                  key={joint.id}
+                  className="g-joint"
+                  data-align={label.align}
+                  data-place={same ? "mid" : "above"}
+                  data-lit={seam.joint === litJoint ? "" : undefined}
+                  data-hover={hover !== null && (seam.upper === hover || seam.lower === hover) ? "" : undefined}
+                  style={{ left: label.x, top: label.y, width: label.w, height: label.h, "--i": seam.lower } as React.CSSProperties}
+                >
+                  <span className="g-sr">
+                    {pieces[joint.from]!.name} → {pieces[joint.to]!.name}:{" "}
+                  </span>
+                  <span className="g-joint-text">
+                    <span className="g-diamond" aria-hidden="true" />
+                    {joint.label}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {L.loose.length ? (
+          <ul className="g-loose">
+            {L.loose.map((index) => {
+              const joint = joints[index]!;
+              return (
+                <li key={joint.id} data-lit={index === litJoint ? "" : undefined}>
+                  <span className="g-diamond" aria-hidden="true" />
+                  {alsoJoint(pieces[joint.from]!.name, pieces[joint.to]!.name, joint.label)}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+
+        <footer className="g-puzzle-foot">
+          <ul className="g-legend" aria-label={S.projects}>
+            {bands.map((band) => (
+              <li key={band}>
+                <span className="g-swatch" data-tint={tintOfBand(band)} aria-hidden="true" />
+                {band}
+              </li>
+            ))}
+            {hasNew ? (
+              <li>
+                <span className="g-swatch" data-type="new" aria-hidden="true" />
+                {S.newCode}
+              </li>
+            ) : null}
+            {hasIdea ? (
+              <li>
+                <span className="g-swatch" data-type="idea" aria-hidden="true" />
+                {S.idea}
+              </li>
+            ) : null}
+          </ul>
+          {(() => {
+            // The lit or hovered piece, from inside: Pi answers with a walk through its lines.
+            const piece = hover !== null ? pieces[hover] : litPiece >= 0 ? pieces[litPiece] : undefined;
+            if (!piece?.ref || busy || turn.live) return null;
+            return (
+              <button
+                type="button"
+                className="g-link"
+                onClick={() =>
+                  void trigger(`¿Cómo funciona «${piece.name}» por dentro?`, undefined, {
+                    type: "continue_conversation",
+                    params: {
+                      kind: "puzzle",
+                      block,
+                      choices: [piece.id],
+                      note: `The user asked to look inside ${piece.id} «${piece.name}» of your Puzzle ${block} in ${turn.id}. Answer with a Walkthrough of its lines.`,
+                    },
+                  })
+                }
+              >
+                {S.inside} ›
+              </button>
+            );
+          })()}
+        </footer>
+      </div>
+
+    </figure>
+  );
+}

@@ -3,24 +3,72 @@ import { normalizeRef, type RefEntry } from "./refs";
 
 export type Phase = "idle" | "streaming" | "done";
 
-export interface AnswerState {
-  /** Bumped by reset(): a new answer remounts everything (no stale figure state). */
-  answer: number;
-  refs: ReadonlyMap<string, RefEntry>;
+/** One line of what Pi is doing, written by Swift in Spanish. `places`: show the found pieces under it. */
+export interface TrailLine {
+  text: string;
+  running?: boolean;
+  places?: boolean;
+}
+
+export interface Trail {
+  lines: TrailLine[];
+  /** Set once the answer is drawn: the trail folds to this line, with "Ver el proceso" to open it again. */
+  summary?: string;
+  /** Pi's thinking, in full, for the open process. */
+  thinking?: string;
+}
+
+/** A turn asked by picking in an earlier one: which turn, which block, what was chosen. */
+export interface Via {
+  turn: string;
+  block: string;
+  choices: string[];
+}
+
+export interface Turn {
+  id: string;
+  question: string;
+  via?: Via;
   text: string;
   phase: Phase;
   /** Bumped whenever the program text is replaced wholesale (repair turn). */
   revision: number;
-  /** The native card selection: light the part citing this ref. */
-  selected: string | null;
   /** Something was dropped after the repair turn. */
   notice: boolean;
   /** Set by replace(): the repair turn is over; `dropped` is what was still broken and is no longer shown. */
   final: boolean;
   dropped: { id: string; message: string }[];
+  trail: Trail;
+  /** Drawn from the history log: no entrance, no error reports, nothing to repair. */
+  replay: boolean;
 }
 
-let state: AnswerState = { answer: 0, refs: new Map(), text: "", phase: "idle", revision: 0, selected: null, notice: false, final: false, dropped: [] };
+export interface ThreadState {
+  /** Bumped by reset(): a new chat remounts everything (no stale figure state). */
+  chat: number;
+  refs: ReadonlyMap<string, RefEntry>;
+  turns: Turn[];
+  /** The native selection: light the piece citing this ref. */
+  selected: string | null;
+  /** Pi is answering: nothing on the page may send another question. */
+  busy: boolean;
+}
+
+export const newTurn = (id: string, question = "", patch: Partial<Turn> = {}): Turn => ({
+  id,
+  question,
+  text: "",
+  phase: "idle",
+  revision: 0,
+  notice: false,
+  final: false,
+  dropped: [],
+  trail: { lines: [] },
+  replay: false,
+  ...patch,
+});
+
+let state: ThreadState = { chat: 0, refs: new Map(), turns: [], selected: null, busy: false };
 const listeners = new Set<() => void>();
 let queued = 0;
 let queuedOnTimer = false;
@@ -56,8 +104,21 @@ export const store = {
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
-  set(patch: Partial<AnswerState>, now = false) {
+  set(patch: Partial<ThreadState>, now = false) {
     state = { ...state, ...patch };
+    if (now) flushNow();
+    else emit();
+  },
+  /** The turn the stream goes to: the last one, made on the spot when Swift streams without opening one. */
+  current(): Turn {
+    const last = state.turns[state.turns.length - 1];
+    if (last) return last;
+    const turn = newTurn("t1");
+    state = { ...state, turns: [turn] };
+    return turn;
+  },
+  patchTurn(id: string, patch: Partial<Turn>, now = false) {
+    state = { ...state, turns: state.turns.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)) };
     if (now) flushNow();
     else emit();
   },
@@ -71,18 +132,32 @@ export const store = {
     emit();
   },
   reset() {
-    // A new answer brings its own refs: never let an old table vouch for a new program.
-    state = { answer: state.answer + 1, refs: new Map(), text: "", phase: "idle", revision: 0, selected: null, notice: false, final: false, dropped: [] };
+    // A new chat brings its own refs: never let an old table vouch for a new program.
+    state = { chat: state.chat + 1, refs: new Map(), turns: [], selected: null, busy: state.busy };
     flushNow();
   },
 };
 
-export function useAnswerState() {
+export function useThread() {
   return React.useSyncExternalStore(store.subscribe, store.get, store.get);
 }
 
 export const RefsContext = React.createContext<ReadonlyMap<string, RefEntry>>(new Map());
 export const SelectedContext = React.createContext<string | null>(null);
+/** Which turn a block belongs to, so a figure plays its entrance once per answer (and never when replayed); `live`
+ * while it still streams. */
+export const TurnContext = React.createContext<{ key: string; id: string; replay: boolean; live: boolean; quiz: boolean }>({ key: "", id: "", replay: false, live: false, quiz: false });
+
+/** A turn asked with «Ponme a prueba»: its answer is the Checks. */
+export const QUIZ = "quiz";
+export const isQuiz = (via?: Via) => Boolean(via?.choices.includes(QUIZ));
+
+/** What was picked from each block so far, by "turn:block", from the later turns' `via`; and whether Pi is busy. */
+export const PicksContext = React.createContext<{ picked: ReadonlyMap<string, Via[]>; busy: boolean }>({ picked: new Map(), busy: false });
+
+export function usePicks() {
+  return React.useContext(PicksContext);
+}
 
 export function useRefs() {
   return React.useContext(RefsContext);

@@ -139,19 +139,18 @@ nonisolated func approximately(_ seconds: Double) -> String {
     seconds < 0.5 ? "< 1 s" : "≈ \(roughDuration(seconds))"
 }
 
-/// "8 s", "2 min", "1.5 h": the precision an estimate deserves.
+/// "8 s", "2 min", "1,5 h": the precision an estimate deserves.
 nonisolated func roughDuration(_ seconds: Double) -> String {
     switch seconds {
     case ..<90: "\(Int(seconds.rounded())) s"
     case ..<5400: "\(Int((seconds / 60).rounded())) min"
-    default: String(format: "%.1f h", seconds / 3600)
+    default: "\((seconds / 3600).formatted(.number.precision(.fractionLength(1)).locale(Locale(identifier: "es")))) h"
     }
 }
 
-/// "40 MB", "1.2 GB": the precision an estimate of an index's size deserves.
+/// "40 MB", "1,2 GB": the precision an estimate of an index's size deserves.
 nonisolated func roughBytes(_ bytes: Double) -> String {
-    let formatter = ByteCountFormatter()
-    formatter.countStyle = .file
-    formatter.allowedUnits = bytes < 1_000_000 ? [.useKB] : bytes < 1_000_000_000 ? [.useMB] : [.useGB]
-    return formatter.string(fromByteCount: Int64(bytes < 10_000_000 ? bytes : (bytes / 1_000_000).rounded() * 1_000_000))
+    let units: ByteCountFormatStyle.Units = bytes < 1_000_000 ? .kb : bytes < 1_000_000_000 ? .mb : .gb
+    return Int64(bytes < 10_000_000 ? bytes : (bytes / 1_000_000).rounded() * 1_000_000)
+        .formatted(.byteCount(style: .file, allowedUnits: units).locale(Locale(identifier: "es")))
 }

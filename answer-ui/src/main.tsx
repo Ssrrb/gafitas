@@ -4,10 +4,11 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { installBridge } from "./bridge";
 import { post } from "./post";
-import "./vendor/anatomy/iso.css";
 import "./styles/theme.css";
 import "./styles/page.css";
-import "./styles/figure.css";
+import "./styles/puzzle.css";
+import "./styles/choices.css";
+import "./styles/proof.css";
 import { whenDrawn } from "./store";
 
 installBridge();
@@ -16,5 +17,5 @@ whenDrawn(() => post({ type: "ready" }));
 
 if (import.meta.env.DEV) {
   const params = new URLSearchParams(location.search);
-  if (params.has("f")) void import("./dev/harness").then(({ runFixture }) => runFixture(params));
+  if (params.has("f") || params.has("thread")) void import("./dev/harness").then(({ runFixture }) => runFixture(params));
 }

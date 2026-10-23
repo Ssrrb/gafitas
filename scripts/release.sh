@@ -4,8 +4,6 @@
 # NOTARY_PROFILE names notarytool credentials in your keychain, saved once with
 #   xcrun notarytool store-credentials Gafitas --apple-id you@example.com --team-id TEAMID
 # (it asks for an app-specific password from appleid.apple.com). Output: build.noindex/release/Gafitas-<version>.dmg
-# With APPCAST=<path to appcast.xml> (and NOTES=<an HTML fragment> for the update window), the DMG is also signed for
-# Sparkle and listed first in that update feed (scripts/appcast.py). Publishing the DMG and the feed is a separate step.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${SIGN_ID:?set SIGN_ID to a Developer ID Application identity (security find-identity -v -p codesigning)}"
@@ -13,15 +11,6 @@ cd "$(dirname "$0")/.."
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
 APP=build.noindex/Gafitas.app
 OUT=build.noindex/release
-# With APPCAST set the DMG gets signed for Sparkle at the end: make sure the key is in the keychain before the minutes of
-# building and notarizing (sign_update -p prints the public key, or fails without one).
-if [[ -n "${APPCAST:-}" ]]; then
-  SIGN_UPDATE=.build/artifacts/sparkle/Sparkle/bin/sign_update
-  if [[ -x "$SIGN_UPDATE" ]] && ! "$SIGN_UPDATE" -p >/dev/null 2>&1; then
-    echo "APPCAST is set but sign_update finds no Sparkle key in the keychain: not building a DMG that can't be signed" >&2
-    exit 1
-  fi
-fi
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
@@ -48,7 +37,4 @@ xcrun stapler staple "$DMG"
 
 spctl --assess --type execute --verbose=2 "$APP"
 spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
-if [[ -n "${APPCAST:-}" ]]; then
-  scripts/appcast.py "$DMG" "$APPCAST" ${NOTES:+--notes "$NOTES"}
-fi
 echo "Released $DMG ($(du -h "$DMG" | cut -f1))"

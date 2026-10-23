@@ -3,11 +3,11 @@ import Foundation
 
 /// Where people keep code: the folders code search offers before you pick your own.
 enum CodeFolders {
-    /// The home folder's folders that hold a repo (themselves or one level down): ~/Developer, ~/Projects, ~/Codes…,
-    /// or `-codeLocations a:b` (tests point it at the testbed; a dev run never offers real folders). Desktop, Documents
-    /// and Downloads are only looked into when they're searched already (macOS would ask first), for the usual names
-    /// people keep repos under there.
-    static func candidates(searched roots: [URL]) -> [URL] {
+    /// The home folder's folders that hold a repo (themselves or one level down): ~/Desktop, ~/Documents, ~/Developer,
+    /// ~/Projects, ~/src, ~/code…, or `-codeLocations a:b` (tests point it at the testbed; a dev run never offers real
+    /// folders). Desktop and Documents are looked into directly (macOS asks first), and for the usual names people
+    /// keep repos under there when they hold none themselves.
+    static func candidates() -> [URL] {
         if let list = UserDefaults.standard.string(forKey: "codeLocations") {
             return list.split(separator: ":").map { AppSettings.folderURL(String($0)) }
         }
@@ -17,18 +17,15 @@ enum CodeFolders {
         }
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser
-        let asked: Set<String> = ["Desktop", "Documents", "Downloads", "Library", "Pictures", "Movies", "Music", "Public",
-                                  "Applications", "Sites"]
+        let asked: Set<String> = ["Downloads", "Library", "Pictures", "Movies", "Music", "Public", "Applications", "Sites"]
         var found: [URL] = []
         for name in (try? fm.contentsOfDirectory(atPath: home.path)) ?? []
         where !name.hasPrefix(".") && !asked.contains(name) {
             let folder = AppSettings.folderURL(home.appendingPathComponent(name).path)
             if AppSettings.isFolder(folder), holdsCode(folder) { found.append(folder) }
         }
-        for parent in ["Documents", "Desktop"] {
+        for parent in ["Documents", "Desktop"] where !found.contains(where: { $0.lastPathComponent == parent }) {
             let folder = home.appendingPathComponent(parent)
-            guard roots.contains(where: { $0.path == folder.path || FolderSelection.isInside(folder.path, $0.path) })
-            else { continue }
             for name in ["GitHub", "Code", "Projects", "Developer", "dev", "src", "repos", "Repositories"] {
                 let inner = AppSettings.folderURL(folder.appendingPathComponent(name).path)
                 if AppSettings.isFolder(inner), holdsCode(inner) { found.append(inner) }

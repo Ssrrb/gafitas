@@ -2,7 +2,7 @@
 # Launches build.noindex/Gafitas.app against the testbed with a scratch index, models folder and settings under
 # .dev/ and a separate defaults suite: never real folders, never the real index, model or settings. Extra launch
 # arguments pass through, e.g.
-#   scripts/dev-run.sh -debugQuery "zebra" -debugSnapshot /tmp/panel.png -debugQuit YES
+#   scripts/dev-run.sh -debugWindow ask -debugQuery "how are retries done?" -debugSnapshot /tmp/ask.png -debugQuit YES
 # ROOTS=a:b:c overrides the folders (keep them inside the testbed); ROOTS= (empty) launches with none, as a fresh
 # install would. INDEX, MODELS and SUITE override the rest; APP=/Applications/Gafitas.app runs an installed copy the
 # same way. The app's log is <index>/app.log.

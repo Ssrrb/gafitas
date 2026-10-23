@@ -1,0 +1,5 @@
+root = Answer("Los reintentos ya viven en urllib3; hay dos caminos.", [k1])
+w1 = Way("Montar un HTTPAdapter con Retry", "sync", "Pasa un Retry al HTTPAdapter que montas.", "bajo", "Solo reintenta lo que urllib3 repite.", ["r9", "r2:696-709"])
+w2 = Way("Envolver Session.send", "flow", "Toca 3 archivos de requests para repetir send.", "medio", "Repites lógica que urllib3 ya trae.", ["r1:784"])
+w3 = Way("Reintentar en tu código", "wrench", "Un decorador repite la llamada.", "regular", "No distingue errores.")
+k1 = Ways("¿Dónde pongo los reintentos?", [w1, w2, w3])

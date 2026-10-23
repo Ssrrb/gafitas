@@ -1,0 +1,5 @@
+root = Answer("Sin tu código a la vista, este es el plan general para añadir reintentos a un cliente HTTP.", [b0])
+i1 = Item("falta", "Una política de reintentos", "checklist", "", "Qué errores, cuántas veces, cuánta espera")
+i2 = Item("falta", "Espera exponencial", "clock", "", "Con un poco de azar entre intentos")
+i3 = Item("decidir", "¿Reintentar escrituras?", "shield", "", "Solo si son idempotentes")
+b0 = Board("Reintentos en un cliente HTTP", [i1, i2, i3])

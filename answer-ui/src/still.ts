@@ -4,6 +4,7 @@ let forced = false;
 
 export const forceStill = (on: boolean) => {
   forced = on;
+  if (typeof document !== "undefined") document.documentElement.toggleAttribute("data-still", on);
 };
 
 export function isStill() {

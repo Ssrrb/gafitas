@@ -174,6 +174,17 @@ export function codeRows(entry: RefEntry, from: number, to: number, line: number
   return rowsOf(entry, show, (n) => n >= a && n <= b);
 }
 
+/** Where code refuses: a throw, a raise, an error handed back. */
+const REJECTS = /\b(throw|raise|panic!?|abort|reject)\b|createErrorToolResult|return\s+\.inr|\bErr\(/;
+
+/** A Proof's rejecting lines: the cited range with no context, lit only where it refuses (or all of it, when no line
+ * does). */
+export function rejectRows(entry: RefEntry, from: number, to: number): CodeRow[] {
+  const rows = codeRows(entry, from, to, from, 0, false);
+  const refusing = rows.some((row) => row.kind === "line" && row.lit && REJECTS.test(row.text));
+  return refusing ? rows.map((row) => (row.kind === "line" ? { ...row, lit: row.lit && REJECTS.test(row.text) } : row)) : rows;
+}
+
 export interface TileRow {
   text: string;
   /** The hand-off line (or the def of the last piece): full ink; the rest are muted. */

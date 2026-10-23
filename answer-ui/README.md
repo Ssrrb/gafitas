@@ -63,7 +63,7 @@ Standalone (no handler) the page logs instead, and keeps a copy in `window.__gaf
 | `{type: "open", ref: "r2", line: 44}` | A piece, chip, found place or snippet line was clicked. `line` is the citation's line, else the ref's `focus`, else its first line. |
 | `{type: "hover", ref: "r2" \| null}` | Pointer or focus on something that cites a ref; `null` when it leaves. Repeats are dropped. |
 | `{type: "adapt", ref: "r2" \| null, path: "src/x.py"}` | The "Adaptar…" button of a `NewPiece`. |
-| `{type: "pick", turn: "t1", message, context: {kind, block, choices, note?}}` | The reader picked: a Way, Pick options, a Board item, a Match, a "Sigue con" question, a puzzle piece's "Ver por dentro" or a Check's "Explícamelo". `message` is the Spanish question to ask next; `context.note` tells Pi what was picked from which block. Swift asks it as the next turn and passes `{turn, block, choices}` back as `via`. |
+| `{type: "pick", turn: "t1", message, context: {kind, block, choices, note?}}` | The reader picked: a Way, Pick options, a Board item, a Match, a "Sigue con" question, a puzzle piece's "Ver por dentro", a broken Proof premise's "Preguntar por este rechazo" or a Check's "Explícamelo". `message` is the Spanish question to ask next; `context.note` tells Pi what was picked from which block. Swift asks it as the next turn and passes `{turn, block, choices}` back as `via`. |
 | `{type: "draft", message}` | "Escribir otra cosa…" or "Preguntar por estas líneas…": put `message` in the composer and focus it. |
 | `{type: "errors", turn: "t2", errors: [{id, message}], final?: true, program}` | After `done()` (an empty list when clean), again if `refs()` changes the result, and after `replace()` with `final: true`. `id` is the statement to fix (`p3`, `j1`), `root`, or `line 9` for a line that isn't a statement. Messages are English: only the model reads them. |
 
@@ -72,13 +72,16 @@ Standalone (no handler) the page logs instead, and keeps a copy in `window.__gaf
 Root is `Answer`. Positional arguments, in this order (`?` optional):
 
 ```
-Answer(lede, blocks: (Ways | Pick | Board | Puzzle | Matches | Walkthrough | SideBySide | Snippet | Callout | Check | Text | Next)[])
+Answer(lede, blocks: (Puzzle | Proof | Ways | Pick | Board | Matches | Walkthrough | SideBySide | Snippet | Callout | Check | Text | Next)[])
 Puzzle(title, pieces: (Piece | NewPiece | Idea)[], joints: Joint[], steps: Step[], caption?)   // caption: old chats only
 Piece(name, ref, kind?)                       // code that exists
 NewPiece(name, project, path, from?, note?)   // code still to write: a dashed tile in the gap
 Idea(name, note?)                             // a concept, when there are no refs
 Joint(from, to, label)                        // by piece id; label: what crosses
 Step(lit, text)                               // lit: a piece or joint id
+Proof(title, goal: Rule)                      // why something holds: the goal at the bottom, what it needs above
+Rule(claim, name, given: (Fact | Rule)[], ref?)   // a check in the code: 1–3 premises over a bar named `name`
+Fact(claim, ref?)                             // a premise; ref: the lines that check it and refuse when it's false
 Ways(question, ways: Way[])                   // 2–3 fair ways to do it
 Way(title, icon, what, effort, tradeoff, uses?: ref[])
 Pick(question, options: Option[], multiple?)  // 3–6 icon tiles, when the question is too open to answer yet
@@ -99,9 +102,19 @@ writes buttons or actions: every control is the page's. `Compare(left, right)` s
 draws as a SideBySide; it is left out of the prompt, as are Text, the Puzzle's caption and Side's points.
 
 A ref is `"r3"`, `"r3:18"` or `"r3:41-52"`, always inside the ref's lines. `src/prompt.ts` builds the system prompt from
-the library (`library.prompt`) with the rules and five short examples (a puzzle, a concept, ways, matches across
-requests and urllib3, a walkthrough, all on real refs and about 60 words each); the build writes it to
-`system-prompt.txt`.
+the library (`library.prompt`): a preamble that says the reader understands by doing one thing with a picture (playing
+the flow, breaking a premise, picking a way), the rules that pick the picture by the question's shape, and four
+examples, each labelled with its question, on real lines of Lean's kernel, the Lean REPL and pi (in `~/GafitasDemo`, see
+`fixtures/refs.json`): «¿Cómo integro Lean en mi código?» as a Proof of what the kernel guarantees plus Ways to plug it
+in, the turn after picking a way as a Puzzle with a NewPiece, modus ponens with no refs, and a walkthrough of
+`add_theorem`. The build writes it to `system-prompt.txt`.
+
+What the reader does with each picture: a **Proof** checks itself bar by bar once it's in view («Comprobar» runs it
+again); tapping a premise breaks it, checking stops at the rule under it with the real lines that refuse it lit, the
+rules further down go unreached and the goal shows «No se forma». A **Puzzle** walks its steps once («Reproducir» again),
+the label of each hand-off travelling the seam as a token. Ways ring the code they share, a Board item rings the code it
+attaches to, a SideBySide echoes the names of the hovered line on the other side, and a Walkthrough sweeps each stop's
+lines in. `?still=1` and reduced motion draw every block in its final state.
 
 Validation (`src/validate.ts`, with the Puzzle's own rules in `src/puzzle/model.ts`) reports, each with its statement
 id: the parser's errors, lines that aren't statements or are cut off, names never defined, unknown or out-of-range
@@ -112,7 +125,8 @@ that don't light a piece or joint by id, and the counts and refs of the blocks a
 missing effort, an unknown `sure`, and the word budget: a lede over 18 words, over 100 words of prose in the answer,
 code retyped in prose, a Piece or NewPiece named as a line of code, a quiz with no Check): they go to the repair turn
 once but are never dropped. What the page can cut by itself is never sent back: `drawnBlocks` in `src/library.tsx`
-draws one picture or choice, no Text or Snippet next to a picture, Checks only in a quiz, a Callout, and Next last.
+draws at most two of one picture, one Proof and one choice, no Text or Snippet next to a picture, Checks only in a quiz,
+a Callout, and Next last.
 
 ## The puzzle
 

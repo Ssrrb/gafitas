@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EXAMPLE_CONCEPT, EXAMPLE_INSIDE, EXAMPLE_MATCHES, EXAMPLE_WAYS, EXAMPLE_WITH_REFS, EXAMPLES, systemPrompt } from "../src/prompt";
+import { EXAMPLE_CONCEPT, EXAMPLE_INSIDE, EXAMPLE_PROOF, EXAMPLE_WITH_REFS, EXAMPLES, systemPrompt } from "../src/prompt";
 import { parseProgram, validateProgram } from "../src/validate";
 import { fixture, refsFor } from "./load";
 
@@ -14,26 +14,27 @@ describe("the system prompt", () => {
     }
   });
 
-  it("passes Gafitas's own validation: the refs example against its ref table, the concept example with none", () => {
-    expect(validateProgram(EXAMPLE_WITH_REFS, refsFor("requests-urllib3"))).toEqual([]);
+  it("passes Gafitas's own validation: each example against the real Lean and pi lines it cites, the concept with none", () => {
+    expect(validateProgram(EXAMPLE_PROOF, refsFor("lean-integrate"))).toEqual([]);
+    expect(validateProgram(EXAMPLE_WITH_REFS, refsFor("pi-lean-tool"))).toEqual([]);
     expect(validateProgram(EXAMPLE_CONCEPT, new Map())).toEqual([]);
-    expect(validateProgram(EXAMPLE_WAYS, refsFor("retry-ways"))).toEqual([]);
-    expect(validateProgram(EXAMPLE_MATCHES, refsFor("repos-matches"))).toEqual([]);
-    expect(validateProgram(EXAMPLE_INSIDE, refsFor("inside-adapter"))).toEqual([]);
+    expect(validateProgram(EXAMPLE_INSIDE, refsFor("lean-inside"))).toEqual([]);
   });
 
   it("matches the fixtures, so the examples are what the dev page shows", () => {
-    expect(fixture("requests-urllib3").trim()).toBe(EXAMPLE_WITH_REFS);
-    expect(fixture("hashmap-idea").trim()).toBe(EXAMPLE_CONCEPT);
-    expect(fixture("retry-ways").trim()).toBe(EXAMPLE_WAYS);
-    expect(fixture("repos-matches").trim()).toBe(EXAMPLE_MATCHES);
-    expect(fixture("inside-adapter").trim()).toBe(EXAMPLE_INSIDE);
+    expect(fixture("lean-integrate").trim()).toBe(EXAMPLE_PROOF);
+    expect(fixture("pi-lean-tool").trim()).toBe(EXAMPLE_WITH_REFS);
+    expect(fixture("modus-ponens").trim()).toBe(EXAMPLE_CONCEPT);
+    expect(fixture("lean-inside").trim()).toBe(EXAMPLE_INSIDE);
   });
 
   it("lists every component signature and the rules", () => {
     const prompt = systemPrompt();
     for (const signature of [
       "Answer(lede: string, blocks:",
+      "Proof(title: string, goal: Rule)",
+      "Rule(claim: string, name: string, given: (Fact | Rule)[], ref?: string)",
+      "Fact(claim: string, ref?: string)",
       "Puzzle(title: string, pieces: (Piece | NewPiece | Idea)[], joints: Joint[], steps: Step[])",
       "Piece(name: string, ref: string, kind?: string)",
       "NewPiece(name: string, project: string, path: string, from?: string, note?: string)",
@@ -59,10 +60,12 @@ describe("the system prompt", () => {
     expect(prompt).toContain("Cite code only by refs from the list");
     expect(prompt).toContain("Never write code, a path or a line number");
     expect(prompt).toContain("is Spanish");
+    expect(prompt).toContain("teaches by showing");
+    expect(prompt).not.toContain("any");
     expect(prompt).not.toContain("Compare");
     expect(prompt).not.toContain("Text(");
     expect(prompt).not.toContain("caption");
     expect(prompt).not.toContain("Hoisting");
-    expect(prompt.length).toBeLessThan(10500);
+    expect(prompt.length).toBeLessThan(11500);
   });
 });

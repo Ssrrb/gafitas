@@ -1,0 +1,6 @@
+root = Answer("add_theorem revisa el enunciado, los huecos y por último la prueba.", [k1, n1])
+l1 = Lines("r1:200-201", "exige que el enunciado sea una Prop")
+l2 = Lines("r1:202", "rechaza metavariables y variables libres")
+l3 = Lines("r1:203-205", "infiere el tipo de la prueba y lo compara")
+k1 = Walkthrough("Dentro de add_theorem", [l1, l2, l3])
+n1 = Next(["¿Qué hace is_def_eq?", "¿Quién llama a add_theorem?"])

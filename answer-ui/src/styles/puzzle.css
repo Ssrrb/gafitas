@@ -5,10 +5,16 @@
 
 .g-card {
   position: relative;
-  padding: 14px 16px;
+  padding: 18px 20px;
   border: 1px solid var(--g-edge);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--g-sheet);
+}
+
+@media (max-width: 560px) {
+  .g-card {
+    padding: 14px 12px;
+  }
 }
 
 .g-card:focus {
@@ -30,8 +36,10 @@
 }
 
 .g-puzzle-title {
-  font-size: 14px;
+  font-size: 17px;
+  line-height: 1.3;
   font-weight: 600;
+  letter-spacing: -0.005em;
   text-wrap: balance;
 }
 
@@ -401,4 +409,42 @@ button.g-tile {
   .g-card {
     padding: 12px 10px;
   }
+}
+
+/* Play: what crosses a hand-off travels it, as a token, from the giver to the receiver. */
+.g-token {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  max-width: 220px;
+  height: 22px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--g-lit);
+  border-radius: 999px;
+  background: var(--g-lit-fill);
+  color: var(--g-lit-ink);
+  font: 600 12px/20px var(--g-mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.g-play[aria-pressed="true"] {
+  border-color: var(--g-lit);
+}
+
+@container (max-width: 459px) {
+  .g-play-label {
+    display: none;
+  }
+}
+
+.g-fill,
+.g-joint {
+  transition:
+    fill 240ms ease,
+    opacity 240ms ease;
 }

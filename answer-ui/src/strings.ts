@@ -78,6 +78,21 @@ export const S = {
   inside: "Ver por dentro",
   quizMe: "Ponme a prueba",
   quizMeMessage: "Ponme a prueba.",
+  proof: "demostración",
+  checkProof: "Comprobar",
+  restore: "Restaurar",
+  breakHint: "Toca una premisa para romperla.",
+  stopsHere: "Aquí se detiene",
+  noGoal: "No se forma",
+  holds: "La meta se sostiene.",
+  legendChecked: "comprobada",
+  legendStops: "rechaza",
+  legendBlocked: "sin llegar",
+  askReject: "Preguntar por este rechazo",
+  play: "Reproducir",
+  pause: "Pausar",
+  playSteps: "Reproducir los pasos",
+  pauseSteps: "Pausar los pasos",
   restsOn: (places: number, repos: string[]) =>
     `Se apoya en ${places === 1 ? "1 lugar" : `${places} lugares`} de tu código${repos.length ? `, en ${repos.join(" y ")}` : ""}.`,
 };
@@ -100,6 +115,17 @@ export const linesAria = (from: number, to: number) => (from === to ? `línea ${
 /** "adapters.py:696–709", on a tile. */
 export const linesShort = (file: string, from: number, to: number) => `${file}:${from === to ? from : `${from}–${to}`}`;
 export const openAria = (path: string, from: number, to: number) => `Abrir ${path}, ${linesAria(from, to)}`;
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+export const checkingRule = (name: string) => `Comprobando ${name}…`;
+export const stoppedAt = (name: string, from?: number, to?: number) => `Se detiene en ${name}${from ? `, ${linesAria(from, to ?? from)}` : ""}. La meta no se forma.`;
+export const noLine = (name: string) => `Sin esta premisa, ${name} no se aplica.`;
+export const breakAria = (claim: string) => `Romper la premisa «${claim}»`;
+export const restoreAria = (claim: string) => `Restaurar la premisa «${claim}»`;
+export const ruleAria = (name: string, claim: string, premises: number) => `${claim}: lo concluye ${name} a partir de ${plural(premises, "premisa", "premisas")}`;
+export const proofAria = (title: string, rules: number, premises: number) =>
+  `${title}. ${plural(rules, "regla", "reglas")} y ${plural(premises, "premisa", "premisas")}. Toca una premisa para romperla.`;
+export const askRejectMessage = (claim: string) => `¿Qué hace mi código cuando no se cumple «${claim}»?`;
 
 export const puzzleAria = (title: string, pieces: number, joints: number) =>
   `${title}. ${pieces} ${pieces === 1 ? "pieza" : "piezas"} y ${joints} ${joints === 1 ? "unión" : "uniones"}. Las flechas recorren los pasos.`;

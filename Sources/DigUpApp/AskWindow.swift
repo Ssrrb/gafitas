@@ -520,6 +520,8 @@ final class AskModel {
 
     private func startPi(_ pi: URL) -> Bool {
         let roots = model.settings.codeRoots.filter { !leftOut.contains($0.path) }
+        // A new process may run another model: `begin` waits for it to say which before sending.
+        agentModel = nil
         do {
             let digFrom = refs.keys.compactMap { $0.hasPrefix("d") ? Int($0.dropFirst()) : nil }.max() ?? 0
             try agent.start(pi: pi, roots: roots, index: model.settings.indexDirectory,
